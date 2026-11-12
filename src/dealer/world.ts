@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 
+export type DealerReaction = 'wave' | 'bow' | 'chuckle' | 'flourish';
+
 export type DealerInteraction = {
   pointerX: number;
   pointerY: number;
   greeting: number;
+  reaction?: DealerReaction;
   celebration: number;
+  celebrating?: boolean;
   shop: boolean;
   reducedMotion: boolean;
 };
@@ -15,6 +19,7 @@ export function createDealerWorld(softwareRenderer = false) {
   root.name = 'ember-rune-dealer-world';
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
   const instances: THREE.InstancedMesh[] = [];
   const geometry = <T extends THREE.BufferGeometry>(value: T): T => {
     geometries.add(value);
@@ -34,8 +39,8 @@ export function createDealerWorld(softwareRenderer = false) {
   const teal = material(0x14676a, 0.8);
   const tealLight = material(0x288989, 0.72);
   const midnight = material(0x142e3b, 0.85);
-  const copper = material(0xb67b3d, 0.35, 0.72);
-  const gold = material(0xf0bd60, 0.3, 0.75);
+  const copper = material(0xb67b3d, 0.46, 0.62);
+  const gold = material(0xf0bd60, 0.38, 0.68);
   const leather = material(0x53372b, 0.9);
   const wood = material(0x503326, 0.85);
   const woodLight = material(0x855336, 0.8);
@@ -227,7 +232,7 @@ export function createDealerWorld(softwareRenderer = false) {
     geometry(new THREE.OctahedronGeometry(0.09)),
     gold,
     merchant,
-    [0, 1.72, 0.64],
+    [0.3, 1.35, 0.61],
   );
   pendant.rotation.z = 0.3;
   curve(
@@ -235,7 +240,7 @@ export function createDealerWorld(softwareRenderer = false) {
     copper,
     [
       new THREE.Vector3(-0.18, 1.92, 0.38),
-      new THREE.Vector3(0, 1.72, 0.6),
+      new THREE.Vector3(0.3, 1.35, 0.58),
       new THREE.Vector3(0.18, 1.92, 0.38),
     ],
     0.013,
@@ -350,22 +355,56 @@ export function createDealerWorld(softwareRenderer = false) {
     [0, -0.25, 0.457],
     [0.17, 0.037, 0.021],
   );
-  orb('beard-base', beard, head, [0, -0.44, 0.18], [0.47, 0.35, 0.33]);
+  const jawBeard = new THREE.Group();
+  jawBeard.name = 'jaw-attached-beard';
+  jawBeard.position.set(0, -0.24, 0.46);
+  head.add(jawBeard);
+  orb('beard-base', beard, jawBeard, [0, -0.3, 0.1], [0.4, 0.17, 0.16]);
+  const beardLock = geometry(
+    new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0, -0.6),
+        new THREE.Vector2(0.035, -0.48),
+        new THREE.Vector2(0.09, -0.3),
+        new THREE.Vector2(0.14, -0.05),
+        new THREE.Vector2(0.14, 0.13),
+        new THREE.Vector2(0.09, 0.28),
+        new THREE.Vector2(0, 0.34),
+      ],
+      18,
+    ),
+  );
+  const locks = beardLock.attributes.position;
+  for (let index = 0; index < locks.count; index++) {
+    const y = locks.getY(index);
+    const flow = (0.34 - y) / 0.94;
+    const x = locks.getX(index);
+    const z = locks.getZ(index);
+    const groove = 1 + Math.sin(Math.atan2(z, x) * 7 + flow * 2) * 0.045;
+    locks.setXYZ(index, x * groove, y, z * groove + 0.28 * flow * flow);
+  }
+  beardLock.computeVertexNormals();
+  const beardLocks: THREE.Mesh[] = [];
   for (let index = -3; index <= 3; index++) {
     const strand = mesh(
       `swept-beard-lock-${index}`,
-      drop,
+      beardLock,
       index % 2 ? beardLight : beard,
-      head,
+      jawBeard,
       [
-        index * 0.105,
-        -0.43 + Math.abs(index) * 0.028,
-        0.39 - Math.abs(index) * 0.04,
+        index * 0.09,
+        -0.32 + Math.abs(index) * 0.018,
+        0.2 - Math.abs(index) * 0.015,
       ],
-      [1 - Math.abs(index) * 0.07, index === 0 ? 0.94 : 0.78, 0.8],
+      [
+        0.84 - Math.abs(index) * 0.07,
+        0.65 - Math.abs(index) * 0.065 + (index % 2) * 0.025,
+        0.72,
+      ],
     );
-    strand.rotation.z = index * -0.16 + 0.07;
-    strand.rotation.x = -0.14;
+    strand.rotation.z = index * -0.13 + 0.04;
+    strand.rotation.x = -0.12;
+    beardLocks.push(strand);
   }
   for (const side of [-1, 1]) {
     const moustache = mesh(
@@ -610,6 +649,145 @@ export function createDealerWorld(softwareRenderer = false) {
   );
   guildGem.rotation.z = Math.PI / 4;
 
+  const cloudSurface = material(0x8996b0, 1);
+  cloudSurface.emissive.setHex(0x3b3363);
+  cloudSurface.emissiveIntensity = 0.9;
+  const cloudGeometry = geometry(new THREE.SphereGeometry(1, 16, 10));
+  const cloudVertices = cloudGeometry.attributes.position;
+  for (let index = 0; index < cloudVertices.count; index++) {
+    const x = cloudVertices.getX(index);
+    const y = cloudVertices.getY(index);
+    const z = cloudVertices.getZ(index);
+    const softness = 1 + Math.sin(x * 5 + y * 3) * Math.sin(z * 4) * 0.025;
+    cloudVertices.setXYZ(index, x * softness, y * softness, z * softness);
+  }
+  cloudGeometry.computeVertexNormals();
+  const cloudCenters = [
+    { x: -1.45, y: 4.57, z: -1.1, size: 0.78 },
+    { x: -0.65, y: 4.77, z: -1.9, size: 1.05 },
+    { x: 0.25, y: 4.48, z: -1.45, size: 0.9 },
+    { x: 1.13, y: 4.7, z: -1.2, size: 1.1 },
+    { x: 1.85, y: 4.45, z: -1.8, size: 0.72 },
+  ];
+  const cloudLobes = [
+    { x: 0, y: -0.08, z: 0, sx: 0.5, sy: 0.16, sz: 0.24 },
+    { x: -0.28, y: 0.02, z: 0.015, sx: 0.27, sy: 0.18, sz: 0.22 },
+    { x: -0.08, y: 0.13, z: -0.02, sx: 0.27, sy: 0.27, sz: 0.25 },
+    { x: 0.19, y: 0.12, z: 0.01, sx: 0.3, sy: 0.26, sz: 0.25 },
+    { x: 0.39, y: 0, z: 0, sx: 0.23, sy: 0.16, sz: 0.2 },
+    { x: 0.08, y: 0.02, z: 0.15, sx: 0.3, sy: 0.18, sz: 0.22 },
+  ];
+  const clouds = new THREE.InstancedMesh(
+    cloudGeometry, cloudSurface, cloudCenters.length * cloudLobes.length,
+  );
+  clouds.name = 'drifting-three-dimensional-clouds';
+  clouds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  clouds.frustumCulled = false;
+  instances.push(clouds);
+  root.add(clouds);
+  const cloudTransform = new THREE.Object3D();
+  for (let index = 0; index < clouds.count; index++) {
+    clouds.setColorAt(index, new THREE.Color(index % 3 ? 0xc5c4e3 : 0xafd8d8));
+  }
+
+  const hazeSize = 64;
+  const hazePixels = new Uint8Array(hazeSize * hazeSize * 4);
+  for (let y = 0; y < hazeSize; y++) {
+    for (let x = 0; x < hazeSize; x++) {
+      const u = x / (hazeSize - 1) * 2 - 1;
+      const v = y / (hazeSize - 1) * 2 - 1;
+      const feather = Math.max(0, 1 - u * u - v * v) ** 2;
+      const density = 0.7 + Math.sin(u * 4 + Math.sin(v * 3)) * 0.1;
+      const offset = (y * hazeSize + x) * 4;
+      hazePixels[offset] = hazePixels[offset + 1] = hazePixels[offset + 2] = 255;
+      hazePixels[offset + 3] = Math.round(feather * density * 255);
+    }
+  }
+  const hazeTexture = new THREE.DataTexture(hazePixels, hazeSize, hazeSize);
+  hazeTexture.minFilter = hazeTexture.magFilter = THREE.LinearFilter;
+  hazeTexture.needsUpdate = true;
+  textures.add(hazeTexture);
+  const hazeSurface = new THREE.MeshBasicMaterial({
+    map: hazeTexture,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+  });
+  materials.add(hazeSurface);
+  const haze = new THREE.InstancedMesh(
+    geometry(new THREE.PlaneGeometry(1, 1)), hazeSurface, cloudCenters.length * 4,
+  );
+  haze.name = 'cloud-ethereal-haze';
+  haze.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  haze.frustumCulled = false;
+  instances.push(haze);
+  root.add(haze);
+  for (let index = 0; index < haze.count; index++)
+    haze.setColorAt(index, new THREE.Color(index % 3 ? 0x9a86c4 : 0x78b9bd));
+  const hazeTransform = new THREE.Object3D();
+  const moteCount = cloudCenters.length * 4;
+  const motePositions = new Float32Array(moteCount * 3);
+  const moteColors = new Float32Array(moteCount * 3);
+  const moteGeometry = geometry(new THREE.BufferGeometry());
+  moteGeometry.setAttribute('position', new THREE.BufferAttribute(motePositions, 3));
+  moteGeometry.setAttribute('color', new THREE.BufferAttribute(moteColors, 3));
+  const moteSurface = new THREE.PointsMaterial({
+    map: hazeTexture,
+    size: 0.1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false,
+    toneMapped: false,
+  });
+  materials.add(moteSurface);
+  const motes = new THREE.Points(moteGeometry, moteSurface);
+  motes.name = 'cloud-spell-motes';
+  motes.frustumCulled = false;
+  root.add(motes);
+
+  const filamentSurface = new THREE.MeshBasicMaterial({
+    color: 0x95d6d0,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+  const filamentHalo = new THREE.MeshBasicMaterial({
+    color: 0x8d79c1,
+    transparent: true,
+    opacity: 0.13,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+  materials.add(filamentSurface);
+  materials.add(filamentHalo);
+  const filaments: THREE.Group[] = [];
+  for (let index = 0; index < 2; index++) {
+    const group = new THREE.Group();
+    group.name = `cloud-flowing-filament-${index}`;
+    root.add(group);
+    const points = [
+      new THREE.Vector3(-0.4, -0.04, 0.43),
+      new THREE.Vector3(-0.18, 0.19, 0.48),
+      new THREE.Vector3(0.08, 0.08, 0.5),
+      new THREE.Vector3(0.37, 0.17, 0.44),
+    ];
+    curve('soft-arcane-filament-halo', filamentHalo, points, 0.023, group);
+    curve('flowing-arcane-filament', filamentSurface, points, 0.007, group);
+    filaments.push(group);
+  }
+
   // Shelves, arch stones and coins are instanced to keep the mobile draw count modest.
   mesh('alcove-back-wall', box, mortar, root, [0, 2, -2.3], [6.4, 4.6, 0.25]);
   const arch = new THREE.Shape();
@@ -784,6 +962,7 @@ export function createDealerWorld(softwareRenderer = false) {
   mesh('chest-lock', box, gold, root, [1.8, 1.5, -1.4], [0.09, 0.1, 0.035]);
 
   const candleFlames: THREE.Mesh[] = [];
+  const candleLights: THREE.PointLight[] = [];
   for (const [index, x] of [-1.75, 1.8].entries()) {
     const y = index ? 1.2 : 0.95;
     const z = index ? -1.55 : 0.28;
@@ -815,6 +994,7 @@ export function createDealerWorld(softwareRenderer = false) {
     candleFlames.push(wick);
     const light = new THREE.PointLight(0xffa650, 2.1, 3.5, 2);
     light.name = 'warm-candle-light';
+    candleLights.push(light);
     light.position.set(x, y + 0.4, z);
     root.add(light);
   }
@@ -914,6 +1094,7 @@ export function createDealerWorld(softwareRenderer = false) {
   let celebrationStarted = -100;
   let elapsed = 0;
   let disposed = false;
+  let cloudArrivalComplete = false;
   const update = (
     timeSeconds: number,
     deltaSeconds: number,
@@ -934,17 +1115,39 @@ export function createDealerWorld(softwareRenderer = false) {
     if (interaction.celebration !== lastCelebration) {
       lastCelebration = interaction.celebration;
       celebrationStarted = time;
+      greetingStarted = -100;
     }
     const still = interaction.reducedMotion;
     const idle = still ? 0 : time;
+    // Reduced-motion greetings are consumed immediately, never replayed on re-enable.
+    if (still || interaction.shop || interaction.celebrating)
+      greetingStarted = -100;
+    if (still) celebrationStarted = -100;
     const greetingAge = time - greetingStarted;
-    const greeting =
-      !still && greetingAge < 2 ? Math.sin((greetingAge / 2) * Math.PI) : 0;
     const celebrationAge = time - celebrationStarted;
+    const celebrating = celebrationAge >= 0 && celebrationAge < 3;
+    const greeting =
+      interaction.shop || interaction.celebrating || (!still && celebrating)
+        ? 0
+        : still
+          ? interaction.greeting > 0
+            ? 0.65
+            : 0
+          : greetingAge >= 0 && greetingAge < 2.4
+            ? Math.sin((greetingAge / 2.4) * Math.PI) ** 2
+            : 0;
+    const reaction = interaction.reaction || 'wave';
+    const wave = reaction === 'wave' ? greeting : 0;
+    const bow = reaction === 'bow' ? greeting : 0;
+    const chuckle = reaction === 'chuckle' ? greeting : 0;
+    const flourish = reaction === 'flourish' ? greeting : 0;
+    const laughBounce =
+      chuckle * (still ? 0.5 : Math.abs(Math.sin(greetingAge * 13)));
+    const speech =
+      greeting *
+      (still ? 0.35 : 0.2 + Math.abs(Math.sin(greetingAge * 17)) * 0.8);
     const celebration =
-      !still && celebrationAge < 3
-        ? Math.sin((celebrationAge / 3) * Math.PI)
-        : 0;
+      !still && celebrating ? Math.sin((celebrationAge / 3) * Math.PI) : 0;
     const pointerX = Number.isFinite(interaction.pointerX)
       ? THREE.MathUtils.clamp(interaction.pointerX, -1, 1)
       : 0;
@@ -959,37 +1162,64 @@ export function createDealerWorld(softwareRenderer = false) {
     );
     head.rotation.x = THREE.MathUtils.lerp(
       head.rotation.x,
-      still ? 0 : pointerY * 0.07 + greeting * 0.18 - celebration * 0.13,
+      (still ? 0 : pointerY * 0.07) +
+        bow * 0.45 -
+        chuckle * 0.1 +
+        speech * 0.035 -
+        celebration * 0.13,
       ease,
     );
-    head.rotation.z = still
-      ? 0
-      : Math.sin(idle * 0.65) * 0.025 -
-        greeting * 0.065 +
-        celebration * Math.sin(celebrationAge * 7) * 0.06;
-    merchant.position.y = still
-      ? 0
-      : Math.sin(idle * 1.6) * 0.014 +
-        celebration * Math.abs(Math.sin(celebrationAge * 5)) * 0.13;
+    head.rotation.z =
+      (still ? 0 : Math.sin(idle * 0.65) * 0.025) -
+      wave * 0.065 +
+      chuckle * 0.08 +
+      flourish * 0.1 +
+      celebration * Math.sin(celebrationAge * 7) * 0.06;
+    merchant.position.y =
+      (still ? 0 : Math.sin(idle * 1.6) * 0.014) -
+      bow * 0.08 +
+      laughBounce * 0.065 +
+      celebration * Math.abs(Math.sin(celebrationAge * 5)) * 0.13;
     merchant.rotation.y = THREE.MathUtils.lerp(
       merchant.rotation.y,
       interaction.shop && !still ? -0.035 : 0,
       ease,
     );
-    greetingArm.rotation.z = still
-      ? 0
-      : -greeting * 0.28 -
-        celebration * (1.4 + Math.sin(celebrationAge * 11) * 0.25);
-    greetingArm.rotation.x = still ? 0 : -greeting * 0.25 - celebration * 0.18;
-    crystalArm.rotation.x = still
-      ? 0
-      : Math.sin(idle * 1.3) * 0.025 - celebration * 0.35;
-    crystalArm.rotation.z = still ? 0 : celebration * 0.65;
-    smile.scale.y = 0.105 * (1 + celebration * 0.65);
-    teeth.scale.y = 0.037 * (1 + celebration * 0.3);
-    hat.rotation.z = still
-      ? 0
-      : Math.sin(idle * 1.1 + 0.5) * 0.012 + greeting * 0.09;
+    greetingArm.rotation.z =
+      0 -
+      wave * (2.2 + (still ? 0 : Math.sin(greetingAge * 14) * 0.16)) -
+      bow * 0.32 -
+      laughBounce * 0.2 -
+      celebration * (1.4 + Math.sin(celebrationAge * 11) * 0.25);
+    greetingArm.rotation.x = 0 - wave * 0.35 - bow * 0.3 - celebration * 0.18;
+    crystalArm.rotation.x =
+      (still ? 0 : Math.sin(idle * 1.3) * 0.025) -
+      flourish * 0.3 -
+      celebration * 0.35;
+    crystalArm.rotation.z =
+      flourish * 0.32 + laughBounce * 0.1 + celebration * 0.65;
+    smile.scale.y =
+      0.105 *
+      (1 + speech * 0.85 + chuckle * 0.6 + flourish * 0.2 + celebration * 0.65);
+    smile.position.z = 0.415 + speech * 0.025;
+    teeth.scale.y = 0.037 * (1 + chuckle * 0.3 + celebration * 0.3);
+    teeth.position.y = -0.25 + speech * 0.02;
+    jawBeard.position.y = -0.24 - speech * 0.045;
+    jawBeard.position.z =
+      0.46 + speech * 0.018 + Math.max(0, head.rotation.x) * 0.5;
+    // Hair hangs from the jaw instead of rotating rigidly into the chest on a bow.
+    jawBeard.rotation.x = -0.12 - head.rotation.x * 0.8;
+    jawBeard.rotation.z = -head.rotation.z * 0.3;
+    beardLocks.forEach((lock, index) => {
+      lock.rotation.x =
+        -0.12 + (still ? 0 : Math.sin(idle * 1.8 - index * 0.35) * 0.018);
+    });
+    hat.rotation.x = bow * 0.18;
+    hat.rotation.z =
+      (still ? 0 : Math.sin(idle * 1.1 + 0.5) * 0.012) +
+      wave * 0.1 -
+      bow * 0.17 +
+      laughBounce * 0.06;
     const blinkPhase = idle % 4.7;
     const blink = still
       ? 1
@@ -997,7 +1227,7 @@ export function createDealerWorld(softwareRenderer = false) {
         ? Math.max(0.06, Math.abs(blinkPhase - 4.59) / 0.11)
         : 1;
     eyes.forEach((eye) => {
-      eye.scale.y = blink;
+      eye.scale.y = blink * (1 - chuckle * 0.24 + flourish * 0.1);
     });
     pupils.forEach((gaze) => {
       gaze.position.set(
@@ -1006,18 +1236,85 @@ export function createDealerWorld(softwareRenderer = false) {
         0,
       );
     });
+    magic.position.x = 1.05 - flourish * 0.18;
     magic.position.y =
-      2.23 + (still ? 0 : Math.sin(idle * 1.7) * 0.07) + celebration * 0.18;
-    crystal.rotation.y = still ? 0.35 : idle * 0.55;
+      2.23 +
+      (still ? 0 : Math.sin(idle * 1.7) * 0.07) +
+      flourish * 0.4 +
+      celebration * 0.18;
+    crystal.rotation.y = (still ? 0.35 : idle * 0.55) + flourish * 2.4;
     crystal.rotation.z = still ? 0.12 : Math.sin(idle * 0.8) * 0.13;
-    magic.scale.setScalar(1 + celebration * 0.38);
+    magic.scale.setScalar(1 + flourish * 0.18 + celebration * 0.38);
     runeRings.forEach((ring, index) => {
       ring.rotation.y =
         (index ? 0.9 : 0) + (still ? 0 : idle * (index ? -0.35 : 0.45));
       ring.rotation.x =
         0.7 + index * 0.8 + (still ? 0 : Math.sin(idle * 0.7) * 0.18);
     });
-    magicLight.intensity = 1.8 + celebration * 2;
+    magicLight.intensity = 1.8 + flourish * 0.8 + celebration * 2;
+    if (still) cloudArrivalComplete = true;
+    const arrival = cloudArrivalComplete ? 1 : 1 - Math.exp(-idle * 0.55);
+    cloudSurface.emissiveIntensity = 0.9 + Math.sin(idle * 0.35) * 0.12;
+    hazeSurface.opacity = 0.45 + Math.sin(idle * 0.3) * 0.05;
+    filamentSurface.opacity = 0.5 + Math.sin(idle * 0.3) * 0.08;
+    for (let cluster = 0; cluster < cloudCenters.length; cluster++) {
+      const center = cloudCenters[cluster];
+      const entryX = (cluster % 2 ? 1 : -1) * (3.2 + cluster * 0.25);
+      const driftX = still ? 0 : Math.sin(idle * 0.11 + cluster) * 0.045;
+      const driftY = still ? 0 : Math.sin(idle * 0.13 + cluster * 1.3) * 0.035;
+      const x = entryX + (center.x - entryX) * arrival + driftX;
+      if (cluster === 1 || cluster === 3) {
+        const filament = filaments[cluster === 1 ? 0 : 1];
+        filament.position.set(x, center.y + driftY, center.z);
+        filament.scale.setScalar(center.size);
+      }
+      for (let lobe = 0; lobe < cloudLobes.length; lobe++) {
+        const part = cloudLobes[lobe];
+        const breath = still ? 1 : 1 + Math.sin(idle * 0.16 + cluster + lobe * 0.4) * 0.018;
+        const size = center.size * breath;
+        cloudTransform.position.set(
+          x + part.x * center.size,
+          center.y + driftY + part.y * center.size,
+          center.z + part.z * center.size,
+        );
+        cloudTransform.scale.set(part.sx * size, part.sy * size, part.sz * size);
+        cloudTransform.rotation.y = cluster * 0.2;
+        cloudTransform.updateMatrix();
+        clouds.setMatrixAt(cluster * cloudLobes.length + lobe, cloudTransform.matrix);
+      }
+      for (let wisp = 0; wisp < 4; wisp++) {
+        const index = cluster * 4 + wisp;
+        const angle = wisp * 2.39996;
+        hazeTransform.position.set(
+          x + Math.cos(angle) * 0.28 * center.size,
+          center.y + driftY + Math.sin(angle) * 0.12 * center.size,
+          center.z + 0.48 * center.size,
+        );
+        hazeTransform.scale.set(center.size * 1.5, center.size * 0.95, 1);
+        hazeTransform.rotation.z = angle + Math.sin(idle * 0.07 + index) * 0.08;
+        hazeTransform.updateMatrix();
+        haze.setMatrixAt(index, hazeTransform.matrix);
+        const phase = index * 2.39996 + idle * 0.12;
+        motePositions[index * 3] = x + Math.sin(phase) * 0.58 * center.size;
+        motePositions[index * 3 + 1] = center.y + driftY + 0.14 + Math.cos(phase * 0.7) * 0.28;
+        motePositions[index * 3 + 2] = center.z + 0.32 + Math.sin(phase) * 0.09;
+        const shimmer = 0.6 + Math.sin(idle * 0.7 + index * 1.7) * 0.25;
+        moteColors[index * 3] = (index % 3 ? 0.55 : 0.4) * shimmer;
+        moteColors[index * 3 + 1] = (index % 3 ? 0.65 : 1) * shimmer;
+        moteColors[index * 3 + 2] = shimmer;
+      }
+    }
+    clouds.instanceMatrix.needsUpdate = true;
+    haze.instanceMatrix.needsUpdate = true;
+    moteGeometry.attributes.position.needsUpdate = true;
+    moteGeometry.attributes.color.needsUpdate = true;
+    candleLights.forEach((light, index) => {
+      light.intensity = still
+        ? 2.1
+        : 2.1 +
+          Math.sin(idle * 8.3 + index * 2) * 0.12 +
+          Math.sin(idle * 13.7 + index) * 0.06;
+    });
     candleFlames.forEach((value, index) => {
       value.scale.y = 0.2 * (still ? 1 : 1 + Math.sin(idle * 9 + index) * 0.1);
       value.rotation.z =
@@ -1067,6 +1364,7 @@ export function createDealerWorld(softwareRenderer = false) {
       instances.forEach((value) => value.dispose());
       geometries.forEach((value) => value.dispose());
       materials.forEach((value) => value.dispose());
+      textures.forEach((value) => value.dispose());
       root.clear();
     },
   };

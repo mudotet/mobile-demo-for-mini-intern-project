@@ -105,7 +105,7 @@ export default function PurchaseCelebration({
     >
       <LinearGradient
         pointerEvents="none"
-        colors={['#061324b8', '#07162500', '#07162500', '#061322f2']}
+        colors={['#141c17d9', '#141c1700', '#141c1700', '#141c17f2']}
         locations={[0, 0.22, 0.62, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -125,7 +125,7 @@ export default function PurchaseCelebration({
               style={[
                 s.spark,
                 {
-                  backgroundColor: index % 3 ? '#f3d58b' : '#90f2df',
+                  backgroundColor: index % 3 ? colors.gold : colors.green,
                   opacity: burst.interpolate({
                     inputRange: [0, 0.1, 0.7, 1],
                     outputRange: [0, 1, 0.8, 0],
@@ -187,7 +187,7 @@ export default function PurchaseCelebration({
           ]}
         >
           <View style={s.successSeal}>
-            <Icon name="check-bold" size={23} color="#183e35" />
+            <Icon name="check-bold" size={21} color={colors.gold} />
           </View>
           <Text style={[s.title, compact && { fontSize: 25 }]}>{title}</Text>
         </Animated.View>
@@ -264,24 +264,24 @@ const s = StyleSheet.create({
     paddingHorizontal: 21,
     paddingBottom: 12,
   },
-  heading: { alignItems: 'center', paddingTop: 22, gap: 10 },
+  heading: { alignItems: 'center', paddingTop: 24, gap: 12 },
   successSeal: {
     width: 42,
     height: 42,
-    borderRadius: 21,
-    backgroundColor: '#bbe2bb',
-    borderWidth: 2,
-    borderColor: '#efd292',
+    borderRadius: 3,
+    backgroundColor: '#263025',
+    borderWidth: 1,
+    borderColor: '#9b9164',
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     color: colors.cream,
     fontFamily: 'Cinzel',
-    fontSize: 29,
+    fontSize: 27,
     lineHeight: 37,
     textAlign: 'center',
-    textShadowColor: '#0a1722',
+    textShadowColor: '#141c17',
     textShadowOffset: { width: 1, height: 2 },
     textShadowRadius: 4,
   },
@@ -293,10 +293,11 @@ const s = StyleSheet.create({
     paddingBottom: 13,
   },
   stageHint: {
-    color: '#f2dfb9',
+    color: colors.cream,
     fontFamily: 'Barlow',
-    fontSize: 16,
-    textShadowColor: '#071520',
+    fontSize: 14,
+    letterSpacing: 1,
+    textShadowColor: '#141c17',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
@@ -311,11 +312,11 @@ const s = StyleSheet.create({
   },
   rewardPanel: {
     borderTopWidth: 1,
-    borderColor: '#e0bd72',
-    backgroundColor: '#102a32ed',
-    borderRadius: 15,
-    padding: 12,
-    gap: 10,
+    borderColor: colors.gold,
+    backgroundColor: '#202b22ed',
+    borderRadius: 3,
+    padding: 14,
+    gap: 14,
   },
   rewardScroll: { flexShrink: 1 },
   rewardContent: { gap: 8 },
@@ -330,7 +331,7 @@ const s = StyleSheet.create({
   reward: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   rewardText: { color: colors.cream, fontFamily: 'Barlow', fontSize: 28 },
   message: {
-    color: '#c3d8d4',
+    color: colors.muted,
     fontSize: 12,
     lineHeight: 18,
     textAlign: 'center',

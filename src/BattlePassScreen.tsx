@@ -87,13 +87,13 @@ function RewardArt({
       <Icon
         name="star-four-points"
         size={size * 0.12}
-        color="#fff3bf"
+        color={colors.gold}
         style={{ position: "absolute", left: size * 0.09, top: size * 0.14 }}
       />
       <Icon
         name="star-four-points"
         size={size * 0.08}
-        color="#adf1f2"
+        color={colors.gold}
         style={{ position: "absolute", right: size * 0.08, top: size * 0.35 }}
       />
     </View>
@@ -103,11 +103,11 @@ function RewardArt({
 function StepShield({ step, reached }: { step: number; reached: boolean }) {
   return (
     <View style={s.stepShield}>
-      <Icon name="shield" size={40} color={reached ? "#edbd60" : "#aa8050"} />
+      <Icon name="shield" size={36} color={reached ? colors.gold : "#5f6a53"} />
       <Icon
         name="shield"
-        size={32}
-        color={reached ? "#8d412f" : "#243d50"}
+        size={29}
+        color={reached ? "#3f4933" : "#212b22"}
         style={s.shieldInner}
       />
       <Text style={s.stepText}>{step}</Text>
@@ -145,6 +145,13 @@ function RewardNode({
       : premiumLocked
         ? "PREMIUM LOCKED"
         : `${milestone.required_expbp} EXPBP`;
+  const rewardDescription = Object.entries(node.items)
+    .map(
+      ([resource, amount]) =>
+        `${amount} ${resourceNames[resource] || resource}`,
+    )
+    .join(", ");
+  const milestoneLabel = `${premium ? "Premium" : "Free"} milestone ${milestone.step}`;
   return (
     <View style={s.ladderRow} testID={`pass-node-${node.node_id}`}>
       {reached && (
@@ -156,29 +163,22 @@ function RewardNode({
       <View style={s.stepPosition}>
         <StepShield step={milestone.step} reached={reached} />
       </View>
-      <LinearGradient
-        colors={
-          node.claimable
-            ? premium
-              ? ["#8e5c20", "#50391f", "#273444"]
-              : ["#235b6b", "#173d51", "#142d42"]
-            : ["#254456", "#172f43", "#102237"]
-        }
+      <View
         style={[
           s.rewardCard,
           premium && s.premiumCard,
-          node.claimable && (premium ? s.goldGlow : s.cyanGlow),
+          node.claimable && s.claimableCard,
           node.claimed && s.claimedCard,
         ]}
       >
-        <View style={[s.laneRibbon, premium && s.premiumRibbon]}>
-          {premium && <Icon name="crown" size={11} color="#ffe1a1" />}
-          <Text style={[s.laneText, premium && { color: "#ffe5a4" }]}>
+        <View style={s.laneRibbon}>
+          {premium && <Icon name="crown" size={11} color={colors.gold} />}
+          <Text style={[s.laneText, premium && { color: colors.gold }]}>
             {premium ? "PREMIUM" : "FREE REWARD"}
           </Text>
         </View>
         <View style={s.nodeArt}>
-          <RewardArt kind={kind} size={80} />
+          <RewardArt kind={kind} size={66} />
         </View>
         <Text style={s.rewardQuantity}>
           ×{quantity}
@@ -195,19 +195,19 @@ function RewardNode({
           accessibilityRole="button"
           accessibilityLabel={
             node.claimed
-              ? `Collected ${node.node_id}`
+              ? `Collected ${milestoneLabel}: ${rewardDescription}`
               : node.claimable
-                ? `Claim ${node.node_id}`
+                ? `Claim ${milestoneLabel}: ${rewardDescription}`
                 : premiumLocked
-                  ? `Unlock Premium for ${node.node_id}`
-                  : `Locked ${node.node_id}: ${milestone.required_expbp} EXPBP required`
+                  ? `Unlock Premium for milestone ${milestone.step}: ${rewardDescription}`
+                  : `Locked ${milestoneLabel}: ${milestone.required_expbp} EXPBP required`
           }
           accessibilityState={{ disabled: unavailable }}
           disabled={unavailable}
           onPress={premiumLocked ? onPremium : onClaim}
           style={({ pressed }) => [
             s.claimButton,
-            node.claimable && (premium ? s.goldClaim : s.cyanClaim),
+            node.claimable && s.goldClaim,
             node.claimed && s.collectedButton,
             pressed && s.pressed,
           ]}
@@ -222,10 +222,20 @@ function RewardNode({
             }
             size={15}
             color={
-              node.claimable ? "#fff1c7" : node.claimed ? "#9ee3bb" : "#b3c5cb"
+              node.claimable
+                ? colors.ink
+                : node.claimed
+                  ? colors.green
+                  : colors.muted
             }
           />
-          <Text style={[s.claimText, node.claimed && { color: "#a6e0bf" }]}>
+          <Text
+            style={[
+              s.claimText,
+              node.claimable && { color: colors.ink },
+              node.claimed && { color: colors.green },
+            ]}
+          >
             {label}
           </Text>
         </Pressable>
@@ -237,7 +247,7 @@ function RewardNode({
             <Icon name="check-bold" size={17} color="#133c31" />
           </View>
         )}
-      </LinearGradient>
+      </View>
     </View>
   );
 }
@@ -262,9 +272,9 @@ export default function BattlePassScreen({
     new Map<number, { y: number; height: number }>(),
   );
   const positionedAt = useRef<string | null>(null);
+  const { width, height } = useWindowDimensions();
   const compact =
-    useWindowDimensions().height < 740 ||
-    (availableHeight !== null && availableHeight < 650);
+    height < 740 || (availableHeight !== null && availableHeight < 650);
   const serverNow = pass
     ? Number(pass.server_time) + Math.max(0, now - syncedAt) / 1000
     : 0;
@@ -333,46 +343,21 @@ export default function BattlePassScreen({
       onLayout={(event) => setAvailableHeight(event.nativeEvent.layout.height)}
       pointerEvents={hidden ? "none" : "auto"}
     >
-      <LinearGradient
-        colors={["#154d60", "#17384d", "#411e35"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      <View
         style={[s.banner, compact && s.compactBanner]}
         testID="pass-season-banner"
       >
-        <View style={s.bannerFacets} />
-        <View style={s.bannerRay} />
         <View style={s.bannerTop}>
           <View style={s.seasonCrest}>
-            <Icon name="shield" size={compact ? 76 : 86} color="#b87e3b" />
-            <Icon
-              name="shield"
-              size={compact ? 65 : 74}
-              color="#e7c16e"
-              style={s.crestInset}
-            />
-            <Icon
-              name="shield"
-              size={compact ? 55 : 63}
-              color="#8b3042"
-              style={s.crestInset}
-            />
-            <Icon
-              name="crown"
-              size={compact ? 34 : 39}
-              color="#ffe7a0"
-              style={s.crestInset}
-            />
+            <Icon name="shield-star-outline" size={32} color={colors.gold} />
           </View>
           <View style={s.bannerCopy}>
             <Text style={s.seasonName} numberOfLines={1}>
               {pass?.name.toUpperCase() || "THE SEASON JOURNEY"}
             </Text>
-            <Text style={[s.title, compact && { fontSize: 29 }]}>
-              BATTLE PASS
-            </Text>
+            <Text style={s.title}>BATTLE PASS</Text>
             <View style={s.seasonTime}>
-              <Icon name="timer-sand" size={13} color="#e5c481" />
+              <Icon name="timer-sand" size={13} color={colors.gold} />
               <Text style={s.timeText}>
                 {pass
                   ? `Ends in ${remaining(Number(pass.ends_at) - serverNow)}`
@@ -388,7 +373,7 @@ export default function BattlePassScreen({
             onPress={onRefresh}
             style={s.refreshButton}
           >
-            <Icon name="refresh" size={20} color="#e8cf98" />
+            <Icon name="refresh" size={20} color={colors.gold} />
           </Pressable>
         </View>
         {pass && (
@@ -398,7 +383,7 @@ export default function BattlePassScreen({
             </View>
             <View style={s.progressTrack}>
               <LinearGradient
-                colors={["#167b99", "#5cd2d5"]}
+                colors={["#616f49", "#8d9d66"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[
@@ -412,7 +397,7 @@ export default function BattlePassScreen({
             </View>
           </View>
         )}
-      </LinearGradient>
+      </View>
       {!pass ? (
         <View style={s.empty}>
           <Text style={s.body}>
@@ -451,7 +436,7 @@ export default function BattlePassScreen({
                 <Text
                   style={[
                     s.segmentText,
-                    section === tab && { color: "#ffe6aa" },
+                    section === tab && { color: colors.gold },
                   ]}
                 >
                   {tab === "milestones" ? "MILESTONES" : "DAILY QUESTS"}
@@ -478,7 +463,7 @@ export default function BattlePassScreen({
                     <Icon
                       name="lock-open-variant-outline"
                       size={12}
-                      color="#9abac6"
+                      color={colors.muted}
                     />
                     <Text style={s.featuredUnlock}>
                       {featured.required_expbp} EXPBP
@@ -490,7 +475,7 @@ export default function BattlePassScreen({
                   <View style={[s.featuredArt, compact && { marginTop: 4 }]}>
                     <RewardArt
                       kind={featuredKind}
-                      size={compact ? 80 : 126}
+                      size={compact ? 80 : Math.min(112, width * 0.28)}
                       featured
                     />
                   </View>
@@ -539,7 +524,7 @@ export default function BattlePassScreen({
                       ]}
                     >
                       <LinearGradient
-                        colors={["#f1cc79", "#d99937", "#a86827"]}
+                        colors={["#dfc58f", "#c5a66c"]}
                         style={s.premiumButtonFill}
                       >
                         <View style={s.premiumButtonHeading}>
@@ -551,7 +536,11 @@ export default function BattlePassScreen({
                         {Object.entries(pass.premium_price.currency).map(
                           ([kind, quantity]) => (
                             <View key={kind} style={s.priceRow}>
-                              <ResourceIcon kind={kind} size={24} />
+                              <ResourceIcon
+                                kind={kind}
+                                size={24}
+                                color={colors.ink}
+                              />
                               <Text style={s.priceValue}>{quantity}</Text>
                             </View>
                           ),
@@ -640,7 +629,7 @@ export default function BattlePassScreen({
               {pass.quests.map((quest) => (
                 <LinearGradient
                   key={quest.quest_id}
-                  colors={["#254452", "#142c3e"]}
+                  colors={["#293328", "#252e24"]}
                   style={s.questCard}
                 >
                   <View style={s.questTop}>
@@ -658,9 +647,14 @@ export default function BattlePassScreen({
                   </View>
                   <Text style={s.questDescription}>{quest.description}</Text>
                   <View style={s.questProgressRow}>
-                    <View style={[s.progressTrack, { flex: 1, height: 8 }]}>
+                    <View
+                      style={[
+                        s.progressTrack,
+                        { flex: 1, minHeight: 6, height: 6 },
+                      ]}
+                    >
                       <LinearGradient
-                        colors={["#307d83", "#9ddac5"]}
+                        colors={["#758657", "#b0bc8a"]}
                         style={[
                           s.progressFill,
                           {
@@ -707,152 +701,108 @@ export default function BattlePassScreen({
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, minHeight: 0, backgroundColor: "#102237" },
+  screen: { flex: 1, minHeight: 0, backgroundColor: colors.ink },
   banner: {
-    minHeight: 140,
-    paddingHorizontal: 14,
-    paddingTop: 9,
-    paddingBottom: 13,
-    borderTopWidth: 2,
-    borderBottomWidth: 3,
-    borderColor: "#b58b49",
-    overflow: "hidden",
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#242d23",
   },
-  compactBanner: { minHeight: 119, paddingTop: 4, paddingBottom: 9 },
-  bannerFacets: {
-    position: "absolute",
-    width: 230,
-    height: 230,
-    borderWidth: 30,
-    borderColor: "#e4bd6120",
-    transform: [{ rotate: "35deg" }],
-    left: -84,
-    top: -71,
-  },
-  bannerRay: {
-    position: "absolute",
-    width: 260,
-    height: 270,
-    backgroundColor: "#a1224033",
-    transform: [{ rotate: "24deg" }],
-    right: -150,
-    top: -95,
-  },
+  compactBanner: { paddingTop: 10, paddingBottom: 10 },
   bannerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   seasonCrest: {
-    width: 74,
-    height: 80,
+    width: 44,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 2,
+    borderWidth: 1,
+    borderColor: "#a7976555",
+    borderRadius: 3,
   },
-  crestInset: { position: "absolute" },
   bannerCopy: { flex: 1, minWidth: 0 },
   seasonName: {
-    color: "#e2c697",
+    color: colors.muted,
     fontFamily: "Barlow",
-    fontSize: 11,
-    letterSpacing: 0.7,
-    marginBottom: 2,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    marginBottom: 3,
   },
-  title: {
-    fontFamily: "Barlow",
-    fontSize: 34,
-    lineHeight: 37,
-    color: "#ffe297",
-    textShadowColor: "#061425",
-    textShadowOffset: { width: 1, height: 3 },
-    textShadowRadius: 2,
-  },
+  title: { fontFamily: "Cinzel", fontSize: 24, color: colors.cream },
   seasonTime: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 3,
+    marginTop: 4,
   },
-  timeText: { fontFamily: "Barlow", fontSize: 16, color: "#f1e3c5" },
+  timeText: { fontFamily: "Barlow", fontSize: 14, color: colors.muted },
   refreshButton: {
     minHeight: 44,
     minWidth: 44,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: -8,
+    marginRight: -10,
   },
   bannerProgress: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingLeft: 69,
-    marginTop: 3,
+    gap: 9,
+    marginTop: 12,
   },
   levelBadge: {
-    width: 24,
-    height: 26,
-    backgroundColor: "#8d3a31",
-    borderWidth: 2,
-    borderColor: "#e6be70",
+    width: 26,
+    minHeight: 26,
+    backgroundColor: "#39442e",
+    borderWidth: 1,
+    borderColor: "#7a8257",
     alignItems: "center",
     justifyContent: "center",
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
+    borderRadius: 2,
   },
-  levelText: {
-    fontFamily: "Barlow",
-    color: "#fff0bd",
-    fontSize: 17,
-    lineHeight: 20,
-  },
+  levelText: { fontFamily: "Barlow", color: colors.gold, fontSize: 17 },
   progressTrack: {
-    height: 24,
+    minHeight: 24,
     flex: 1,
-    borderRadius: 5,
+    borderRadius: 2,
     overflow: "hidden",
-    backgroundColor: "#09182b",
-    borderWidth: 1,
-    borderColor: "#718390",
+    backgroundColor: "#141c15",
     justifyContent: "center",
   },
   progressFill: { height: "100%", position: "absolute", left: 0 },
   expValue: {
     fontFamily: "Barlow",
-    color: "#fff1c9",
-    fontSize: 16,
+    color: colors.cream,
+    fontSize: 15,
     textAlign: "center",
-    textShadowColor: "#102032",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
+    paddingVertical: 2,
+    letterSpacing: 0.4,
   },
   segmented: {
     flexDirection: "row",
-    backgroundColor: "#0a192b",
-    borderWidth: 1,
-    borderColor: "#4c6375",
-    marginHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 10,
-    padding: 3,
-    borderRadius: 7,
-    gap: 3,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    marginHorizontal: 16,
+    marginTop: 3,
+    marginBottom: 12,
+    gap: 8,
   },
   segment: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    borderRadius: 4,
-  },
-  segmentSelected: {
-    backgroundColor: "#2a4857",
     borderBottomWidth: 2,
-    borderBottomColor: "#d9af59",
+    borderBottomColor: "transparent",
   },
+  segmentSelected: { borderBottomColor: colors.gold },
   segmentText: {
-    color: "#9db8c6",
+    color: colors.muted,
     fontFamily: "Barlow",
-    fontSize: 17,
-    letterSpacing: 0.3,
+    fontSize: 15,
+    letterSpacing: 0.7,
   },
   readyDot: {
     width: 6,
@@ -864,262 +814,210 @@ const s = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     flexDirection: "row",
-    paddingLeft: 11,
-    paddingRight: 10,
-    gap: 5,
+    paddingLeft: 16,
+    paddingRight: 12,
+    paddingBottom: 8,
+    gap: 8,
   },
   featuredPanel: {
-    width: "40%",
+    width: "36%",
     flexShrink: 0,
     minHeight: 0,
-    backgroundColor: "#0e2034",
+    backgroundColor: "#1d271e",
   },
   featuredScroll: { flex: 1, minHeight: 0 },
   featuredContent: {
     flexGrow: 1,
     alignItems: "center",
-    paddingTop: 9,
+    paddingTop: 14,
     paddingBottom: 12,
   },
   featuredRibbon: {
     alignSelf: "stretch",
     alignItems: "center",
     paddingVertical: 5,
-    backgroundColor: "#8e2939",
     borderTopWidth: 1,
-    borderBottomWidth: 2,
-    borderColor: "#b78c52",
-    marginHorizontal: 1,
+    borderColor: colors.gold,
+    marginHorizontal: 8,
   },
   featuredTitle: {
     fontFamily: "Barlow",
-    fontSize: 15,
-    color: "#ffe19b",
-    textShadowColor: "#35131c",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: colors.gold,
+    textAlign: "center",
   },
   featuredRequirement: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
     alignItems: "center",
     gap: 3,
-    marginTop: 8,
+    marginTop: 7,
   },
-  featuredUnlock: { fontFamily: "Barlow", fontSize: 13, color: "#c5d5d7" },
+  featuredUnlock: { fontFamily: "Barlow", fontSize: 11, color: colors.muted },
   featuredStep: {
-    width: 21,
-    height: 24,
-    backgroundColor: "#873d39",
-    borderWidth: 1,
-    borderColor: "#cfaf6c",
-    borderBottomLeftRadius: 7,
-    borderBottomRightRadius: 7,
+    width: 19,
+    minHeight: 21,
+    backgroundColor: "#3b4530",
+    borderRadius: 2,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 2,
   },
-  featuredStepText: { fontFamily: "Barlow", fontSize: 17, color: "#ffe1ab" },
-  featuredArt: { marginTop: 19 },
+  featuredStepText: { fontFamily: "Barlow", fontSize: 14, color: colors.gold },
+  featuredArt: { marginTop: 28, marginBottom: 8 },
   art: { alignItems: "center", justifyContent: "center" },
-  artHalo: {
-    position: "absolute",
-    backgroundColor: "#7dc9dc0b",
-    borderWidth: 1,
-    borderColor: "#75daea1c",
-  },
-  featuredHalo: {
-    backgroundColor: "#70e6ed15",
-    borderColor: "#75daea48",
-    boxShadow: "0 0 22px #42e3f12e",
-  },
+  artHalo: { position: "absolute", borderWidth: 1, borderColor: "#c1b17f1f" },
+  featuredHalo: { borderColor: "#b8c8a333", backgroundColor: "#b8c8a308" },
   artDiamond: {
     position: "absolute",
-    backgroundColor: "#ac845f11",
     borderWidth: 1,
-    borderColor: "#d4bc8e3b",
+    borderColor: "#c1b17f26",
     transform: [{ rotate: "45deg" }],
-    borderRadius: 8,
+    borderRadius: 2,
   },
-  gemDiamond: { backgroundColor: "#4ee7e90b", borderColor: "#93f0df33" },
+  gemDiamond: { borderColor: "#b8c8a333" },
   artMain: { transform: [{ rotate: "-7deg" }] },
   artShard: { position: "absolute", transform: [{ rotate: "19deg" }] },
   featuredQuantity: {
     fontFamily: "Barlow",
-    fontSize: 47,
-    lineHeight: 51,
-    color: "#fff0be",
-    textShadowColor: "#061022",
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 1,
+    fontSize: 44,
+    color: colors.cream,
+    textAlign: "center",
   },
   featuredName: {
     fontFamily: "Barlow",
-    fontSize: 23,
-    color: "#f5d278",
-    letterSpacing: 1,
+    fontSize: 18,
+    color: colors.muted,
+    letterSpacing: 2,
   },
-  compactFeaturedName: { fontSize: 18, color: "#f5d278" },
-  premiumDock: {
-    alignSelf: "stretch",
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-  },
-  premiumButton: {
-    minHeight: 70,
-    borderWidth: 2,
-    borderColor: "#e2d1a1",
-    borderRadius: 9,
-    borderBottomWidth: 4,
-    borderBottomColor: "#78502d",
-    overflow: "hidden",
-  },
+  compactFeaturedName: { fontSize: 15, color: colors.muted },
+  premiumDock: { alignSelf: "stretch", padding: 6 },
+  premiumButton: { minHeight: 70, borderRadius: 3, overflow: "hidden" },
   premiumButtonFill: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 5,
-    minHeight: 65,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    minHeight: 70,
   },
   premiumButtonHeading: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
   },
-  premiumButtonText: { color: "#5e3219", fontFamily: "Barlow", fontSize: 14 },
+  premiumButtonText: {
+    color: "#303322",
+    fontFamily: "Barlow",
+    fontSize: 12,
+    textAlign: "center",
+  },
   priceRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    marginTop: 1,
+    marginTop: 2,
   },
-  priceValue: {
-    color: "#fff0c2",
-    fontFamily: "Barlow",
-    fontSize: 29,
-    lineHeight: 32,
-    textShadowColor: "#6b381c",
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 1,
-  },
+  priceValue: { color: "#263020", fontFamily: "Barlow", fontSize: 27 },
   premiumActive: {
     minHeight: 70,
     justifyContent: "center",
     alignItems: "center",
     gap: 4,
     paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "#b59353",
-    borderRadius: 9,
-    backgroundColor: "#393d35",
+    borderTopWidth: 1,
+    borderColor: colors.border,
   },
-  premiumActiveText: { fontFamily: "Barlow", color: colors.gold, fontSize: 16 },
+  premiumActiveText: {
+    fontFamily: "Barlow",
+    color: colors.gold,
+    fontSize: 14,
+    textAlign: "center",
+  },
   ladder: { flex: 1, minWidth: 0, minHeight: 0 },
   ladderContent: { paddingTop: 8, paddingBottom: 24 },
   railLine: {
     position: "absolute",
-    left: 13,
+    left: 11,
     top: 8,
     bottom: 0,
     width: 8,
-    backgroundColor: "#9bbdce",
-    borderWidth: 2,
-    borderColor: "#d0e4ec",
-    borderRadius: 4,
-    boxShadow: "0 0 8px #85c9ed70",
+    backgroundColor: "#3c4935",
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#5c694b",
+    borderRadius: 2,
   },
   railReached: {
     position: "absolute",
-    left: 13,
+    left: 11,
     top: 0,
     bottom: 0,
     width: 8,
-    borderRadius: 4,
-    backgroundColor: "#f8cc68",
-    borderWidth: 2,
-    borderColor: "#fff1af",
-    boxShadow: "0 0 10px #ffbe4990",
+    backgroundColor: colors.gold,
+    borderRadius: 2,
   },
-  ladderRow: { paddingLeft: 27, paddingBottom: 15, minWidth: 0 },
-  stepPosition: { position: "absolute", left: -3, top: 39, zIndex: 2 },
+  ladderRow: { paddingLeft: 27, paddingBottom: 12, minWidth: 0 },
+  stepPosition: { position: "absolute", left: -3, top: 28, zIndex: 2 },
   stepShield: {
-    width: 40,
-    height: 44,
+    width: 36,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
   shieldInner: { position: "absolute" },
   stepText: {
     position: "absolute",
-    top: 9,
+    top: 8,
     fontFamily: "Barlow",
-    color: "#ffe4b0",
-    fontSize: 23,
-    textShadowColor: "#263b44",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
+    color: colors.cream,
+    fontSize: 20,
   },
   rewardCard: {
-    minHeight: 177,
-    borderWidth: 2,
-    borderColor: "#8fa5b4",
-    borderBottomWidth: 4,
-    borderBottomColor: "#061425",
-    borderRadius: 11,
-    paddingHorizontal: 7,
-    paddingBottom: 7,
-    paddingTop: 26,
+    backgroundColor: "#263126",
+    minHeight: 174,
+    borderTopWidth: 1,
+    borderColor: "#5b674b",
+    borderRadius: 3,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    paddingTop: 9,
     alignItems: "center",
   },
-  premiumCard: { borderColor: "#be9b5e", borderBottomColor: "#5a442e" },
-  cyanGlow: {
-    borderColor: "#90f2ff",
-    boxShadow: "0 0 13px #61d9ff75",
-    borderBottomColor: "#4cc7df",
-  },
-  goldGlow: {
-    borderColor: "#ffe28e",
-    boxShadow: "0 0 15px #f5ae3c80",
-    borderBottomColor: "#b68334",
-  },
-  claimedCard: { borderColor: "#6eab97", borderBottomColor: "#2b6256" },
+  premiumCard: { backgroundColor: "#303529", borderColor: "#8c7c51" },
+  claimableCard: { borderColor: colors.gold, backgroundColor: "#39412c" },
+  claimedCard: { borderColor: "#657e5a", opacity: 0.8 },
   laneRibbon: {
-    position: "absolute",
-    top: 7,
-    left: -5,
+    alignSelf: "stretch",
     minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#1d6377",
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#71a6b2",
-    paddingHorizontal: 9,
+    paddingHorizontal: 2,
   },
-  premiumRibbon: { backgroundColor: "#a4273d", borderColor: "#c5a061" },
   laneText: {
-    color: "#bfe5ec",
+    color: colors.muted,
     fontFamily: "Barlow",
-    fontSize: 12,
-    letterSpacing: 0.5,
+    fontSize: 11,
+    letterSpacing: 1,
   },
-  nodeArt: { marginTop: 0 },
+  nodeArt: { marginTop: 2 },
   rewardQuantity: {
-    color: "#fff0c7",
+    color: colors.cream,
     fontFamily: "Barlow",
-    fontSize: 29,
-    lineHeight: 32,
+    fontSize: 27,
     textAlign: "center",
-    marginTop: -4,
-    marginBottom: 7,
-    textShadowColor: "#051525",
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 1,
+    marginTop: -2,
+    marginBottom: 8,
   },
-  rewardKind: { color: "#d9e4dc", fontSize: 17 },
+  rewardKind: { color: "#c9cfbe", fontSize: 16 },
   extraReward: {
-    color: "#d9e4dc",
+    color: "#c9cfbe",
     fontFamily: "Barlow",
     fontSize: 16,
     marginBottom: 4,
@@ -1128,59 +1026,65 @@ const s = StyleSheet.create({
     alignSelf: "stretch",
     minHeight: 44,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#0c2034",
+    backgroundColor: "#1d271e",
     borderWidth: 1,
-    borderColor: "#426377",
-    borderRadius: 5,
+    borderColor: "#525e45",
+    borderRadius: 2,
+    padding: 4,
   },
-  cyanClaim: { backgroundColor: "#24718a", borderColor: "#a8eef2" },
-  goldClaim: { backgroundColor: "#9c6427", borderColor: "#f3d27a" },
-  collectedButton: { backgroundColor: "#1a453f", borderColor: "#589783" },
-  claimText: { fontFamily: "Barlow", color: "#cedbe0", fontSize: 14 },
-  nodeThreshold: {
-    color: "#b8cbd1",
+  goldClaim: { backgroundColor: colors.gold, borderColor: colors.gold },
+  collectedButton: { backgroundColor: "#263b29", borderColor: "#536f47" },
+  claimText: {
     fontFamily: "Barlow",
+    color: "#c9cfbe",
     fontSize: 12,
-    marginTop: 4,
+    textAlign: "center",
+  },
+  nodeThreshold: {
+    color: colors.muted,
+    fontFamily: "Barlow",
+    fontSize: 11,
+    marginTop: 5,
   },
   claimedCheck: {
     position: "absolute",
     right: 6,
     top: 5,
-    backgroundColor: "#a0dfb4",
-    width: 25,
-    height: 25,
-    borderRadius: 13,
+    backgroundColor: colors.green,
+    width: 23,
+    height: 23,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   pressed: { opacity: 0.75, transform: [{ translateY: 1 }] },
   questScroll: { flex: 1, minHeight: 0 },
-  questContent: { paddingHorizontal: 18, paddingTop: 5, paddingBottom: 25 },
-  questIntro: { marginBottom: 16 },
+  questContent: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 25 },
+  questIntro: { marginBottom: 20 },
   questHeading: {
     fontFamily: "Cinzel",
     fontSize: 20,
     color: colors.cream,
     marginBottom: 7,
   },
-  body: { color: "#b4cbd2", fontSize: 12, lineHeight: 19 },
+  body: { color: colors.muted, fontSize: 12, lineHeight: 19 },
   questReset: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     marginTop: 9,
   },
-  questResetText: { color: "#d0bc8e", fontSize: 11 },
+  questResetText: { color: colors.gold, fontSize: 11 },
   questCard: {
-    borderWidth: 1,
-    borderColor: "#648595",
-    borderRadius: 12,
+    borderTopWidth: 1,
+    borderColor: "#6c7654",
+    borderRadius: 3,
     padding: 15,
-    marginBottom: 13,
+    marginBottom: 12,
   },
   questTop: {
     flexDirection: "row",
@@ -1197,7 +1101,7 @@ const s = StyleSheet.create({
   questReward: { flexDirection: "row", alignItems: "center", gap: 5 },
   questRewardText: { fontFamily: "Barlow", fontSize: 23, color: colors.gold },
   questDescription: {
-    color: "#b5cbd1",
+    color: colors.muted,
     fontSize: 12,
     lineHeight: 19,
     marginTop: 6,
@@ -1209,7 +1113,7 @@ const s = StyleSheet.create({
     marginTop: 14,
     marginBottom: 13,
   },
-  questCount: { color: "#d1ddda", fontFamily: "Barlow", fontSize: 18 },
+  questCount: { color: "#c9cfbe", fontFamily: "Barlow", fontSize: 18 },
   questCollected: {
     minHeight: 44,
     flexDirection: "row",
@@ -1222,5 +1126,5 @@ const s = StyleSheet.create({
     fontSize: 19,
     color: colors.green,
   },
-  empty: { paddingHorizontal: 18, paddingVertical: 24, gap: 20 },
+  empty: { paddingHorizontal: 20, paddingVertical: 24, gap: 20 },
 });

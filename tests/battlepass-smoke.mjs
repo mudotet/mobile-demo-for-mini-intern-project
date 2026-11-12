@@ -183,9 +183,9 @@ try {
   assert.equal(initialPass.premium_owned, false);
   assert.equal(initialPass.milestones.length, 6);
   await expbp(0);
-  assert.equal(await page.getByRole('button', { name: /^Locked free_/ }).count(), 6);
-  assert.equal(await page.getByRole('button', { name: /^Unlock Premium for premium_/ }).count(), 6);
-  assert.equal(await page.getByRole('button', { name: 'Locked free_1: 100 EXPBP required', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: /^Locked Free milestone / }).count(), 6);
+  assert.equal(await page.getByRole('button', { name: /^Unlock Premium for milestone / }).count(), 6);
+  assert.equal(await page.getByTestId('pass-node-free_1').getByRole('button', { name: 'Locked Free milestone 1: 100 EXPBP required', exact: true }).isDisabled(), true);
   await currentMilestone(1, false);
   const initialLadderBox = await page.getByTestId('pass-ladder').boundingBox();
   const firstRewardBox = await page.getByTestId('pass-node-free_1').boundingBox();
@@ -218,9 +218,9 @@ try {
   await expbp(100);
   await page.getByRole('tab', { name: 'Milestones', exact: true }).click();
   await currentMilestone(1, false);
-  await page.getByRole('button', { name: 'Claim free_1', exact: true }).click();
+  await page.getByTestId('pass-node-free_1').getByRole('button', { name: 'Claim Free milestone 1: 100 Gold', exact: true }).click();
   await collect('Treasure received');
-  assert.equal(await page.getByRole('button', { name: 'Collected free_1', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByTestId('pass-node-free_1').getByRole('button', { name: 'Collected Free milestone 1: 100 Gold', exact: true }).isDisabled(), true);
   const afterFree = await api('002007');
   assert.equal(afterFree.resources.find(item => item.resource_id === 'gold').quantity, '1000');
   await wallet(afterFree);
@@ -265,7 +265,7 @@ try {
     committedClaim = await response.json();
     await route.abort('failed');
   }, { times: 1 });
-  await page.getByRole('button', { name: 'Claim premium_1', exact: true }).click();
+  await page.getByTestId('pass-node-premium_1').getByRole('button', { name: 'Claim Premium milestone 1: 10 Gems', exact: true }).click();
   await page.getByRole('button', { name: 'CHECK BATTLE PASS ACTION', exact: true }).waitFor();
   assert.ok(committedClaim);
   const lostRequest = mutationRequests.at(-1);
@@ -294,7 +294,7 @@ try {
   assert.deepEqual((await api('002007')).resources, committedClaim.resources);
   await page.waitForFunction(count => window.__dealerMetrics.celebrations === count + 1, beforeRetry);
   await openPass();
-  assert.equal(await page.getByRole('button', { name: 'Collected premium_1', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByTestId('pass-node-premium_1').getByRole('button', { name: 'Collected Premium milestone 1: 10 Gems', exact: true }).isDisabled(), true);
   assert.equal((await api('002007')).resources.find(item => item.resource_id === 'gem').quantity, '60');
 
   await buyXp();
@@ -317,8 +317,8 @@ try {
   await expbp(350);
   await currentMilestone(3);
   await page.getByText('PREMIUM ACTIVE', { exact: true }).waitFor();
-  for (const id of ['free_1', 'premium_1']) assert.equal(await page.getByRole('button', { name: `Collected ${id}`, exact: true }).isDisabled(), true);
-  for (const id of ['free_2', 'free_3', 'premium_2', 'premium_3']) assert.equal(await page.getByRole('button', { name: `Claim ${id}`, exact: true }).isDisabled(), false);
+  for (const id of ['free_1', 'premium_1']) assert.equal(await page.getByTestId(`pass-node-${id}`).getByRole('button', { name: /^Collected (Free|Premium) milestone / }).isDisabled(), true);
+  for (const id of ['free_2', 'free_3', 'premium_2', 'premium_3']) assert.equal(await page.getByTestId(`pass-node-${id}`).getByRole('button', { name: /^Claim (Free|Premium) milestone / }).isDisabled(), false);
   const reloaded = await api('004001');
   assert.equal(reloaded.pass_id, completedPass.pass_id);
   assert.deepEqual(reloaded.milestones, completedPass.milestones);
@@ -369,7 +369,7 @@ try {
   await currentMilestone(3);
   await page.screenshot({ path: `${artifacts}/pass-current-350-375.png` });
   await screenshot('pass-milestones-small');
-  await page.getByRole('button', { name: 'Collected free_1', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByTestId('pass-node-free_1').getByRole('button', { name: 'Collected Free milestone 1: 100 Gold', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${artifacts}/pass-rewards-small.png` });
   await page.getByRole('tab', { name: 'Daily Quests', exact: true }).click();
   await screenshot('pass-quests-small');

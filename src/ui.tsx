@@ -10,18 +10,17 @@ import {
   Text,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import type { DailyOffer, Resource, StaticOffer } from './game';
 
 export const colors = {
-  ink: '#101e20',
-  panel: '#19332f',
-  gold: '#efc877',
-  cream: '#fff2d3',
-  muted: '#adc1b1',
-  green: '#91d1ab',
-  border: '#947349',
+  ink: '#141b18',
+  panel: '#222b24',
+  gold: '#d7b77a',
+  cream: '#f3eddf',
+  muted: '#afb4a4',
+  green: '#a6c8ad',
+  border: '#4c5141',
 };
 export const resourceNames: Record<string, string> = {
   gold: 'Gold',
@@ -44,24 +43,26 @@ const icons = {
   expbp: 'star-four-points',
 } as const;
 const tones: Record<string, string> = {
-  gold: '#f4c667',
-  gem: '#9ee1ce',
-  xp: '#c6acff',
-  expbp: '#efc877',
+  gold: '#dfbd77',
+  gem: '#a3d2bd',
+  xp: '#c5bfdb',
+  expbp: '#d7b77a',
 };
 
 export function ResourceIcon({
   kind,
   size = 24,
+  color,
 }: {
   kind: string;
   size?: number;
+  color?: string;
 }) {
   return (
     <Icon
       name={icons[kind as keyof typeof icons] || 'star-four-points'}
       size={size}
-      color={tones[kind] || colors.gold}
+      color={color || tones[kind] || colors.gold}
     />
   );
 }
@@ -96,10 +97,7 @@ export function GameButton({
         pressed && s.pressed,
       ]}
     >
-      <LinearGradient
-        colors={secondary ? ['#294b40', '#19352f'] : ['#f6d58a', '#c9903d']}
-        style={s.buttonFill}
-      >
+      <View style={[s.buttonFill, secondary && s.secondaryFill]}>
         {busy ? (
           <ActivityIndicator color={secondary ? colors.gold : '#382512'} />
         ) : (
@@ -107,7 +105,7 @@ export function GameButton({
             {title}
           </Text>
         )}
-      </LinearGradient>
+      </View>
     </Pressable>
   );
 }
@@ -121,8 +119,8 @@ export function Wallet({ resources }: { resources: Resource[] }) {
           style={s.walletCell}
           accessibilityLabel={`${resourceNames[kind]} ${resources.find((r) => r.resource_id === kind)?.quantity || '0'}`}
         >
-          <ResourceIcon kind={kind} size={23} />
-          <View>
+          <ResourceIcon kind={kind} size={20} />
+          <View style={s.walletCopy}>
             <Text style={s.walletLabel}>{resourceNames[kind]}</Text>
             <Text style={s.walletValue} testID={`wallet-${kind}`}>
               {resources.find((r) => r.resource_id === kind)?.quantity || '0'}
@@ -167,64 +165,64 @@ export function OfferCard({
   const soldOut = day !== null && day.remaining <= 0;
   return (
     <View style={[s.offer, daily && s.dailyOffer, soldOut && s.soldOut]}>
-      {day && (
-        <View style={s.offerTop}>
-          <Text style={s.remaining}>
-            {day.remaining}/{day.purchase_limit} LEFT
-          </Text>
-          <Text style={s.discount}>−{day.discount_percent}%</Text>
-        </View>
-      )}
-      <LinearGradient
-        colors={
-          kind === 'gem'
-            ? ['#204b47', '#172c2a']
-            : kind === 'xp'
-              ? ['#3c3652', '#222b2e']
-              : ['#51412a', '#292d25']
-        }
-        style={s.itemArt}
-      >
+      <View style={[s.itemArt, daily && s.dailyArt]}>
         <View style={s.itemHalo}>
-          <ResourceIcon kind={kind} size={daily ? 45 : 53} />
+          <ResourceIcon kind={kind} size={daily ? 42 : 32} />
         </View>
-        <Text style={s.itemQuantity}>{Object.values(offer.items)[0]}</Text>
-      </LinearGradient>
-      <Text style={s.offerName} numberOfLines={2}>
-        {packageNames[offer.package_id] || offer.package_id.replace(/_/g, ' ')}
-      </Text>
-      {day && (
-        <Text style={s.oldPrice}>
-          {Object.values(day.original_price.currency)[0]}{' '}
-          {resourceNames[currency]}
+      </View>
+      <View style={s.offerInfo}>
+        {day && (
+          <View style={s.offerTop}>
+            <Text style={s.discount}>−{day.discount_percent}%</Text>
+            <Text style={s.remaining}>
+              {day.remaining}/{day.purchase_limit} LEFT
+            </Text>
+          </View>
+        )}
+        <Text style={s.offerName}>
+          {packageNames[offer.package_id] ||
+            offer.package_id.replace(/_/g, ' ')}
         </Text>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Buy ${packageNames[offer.package_id] || offer.package_id} for ${amount} ${resourceNames[currency]}`}
-        accessibilityState={{ disabled: disabled || soldOut }}
-        disabled={disabled || soldOut}
-        onPress={onBuy}
-        style={({ pressed }) => [
-          s.buyButton,
-          soldOut && s.disabled,
-          pressed && s.pressed,
-        ]}
-      >
-        <LinearGradient
-          colors={soldOut ? ['#3b4940', '#29362f'] : ['#517f56', '#2e5e43']}
-          style={s.buyFill}
+        {Object.entries(offer.items).map(([resource, quantity]) => (
+          <Text key={resource} style={s.itemQuantity}>
+            {quantity}{' '}
+            <Text style={s.itemKind}>
+              {resourceNames[resource] || resource}
+            </Text>
+          </Text>
+        ))}
+      </View>
+      <View style={s.offerPrice}>
+        {day && (
+          <Text style={s.oldPrice}>
+            {Object.values(day.original_price.currency)[0]}{' '}
+            {resourceNames[currency]}
+          </Text>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Buy ${packageNames[offer.package_id] || offer.package_id} for ${amount} ${resourceNames[currency]}`}
+          accessibilityState={{ disabled: disabled || soldOut }}
+          disabled={disabled || soldOut}
+          onPress={onBuy}
+          style={({ pressed }) => [
+            s.buyButton,
+            soldOut && s.disabled,
+            pressed && s.pressed,
+          ]}
         >
-          {soldOut ? (
-            <Text style={s.buyText}>SOLD OUT</Text>
-          ) : (
-            <>
-              <ResourceIcon kind={currency} size={19} />
-              <Text style={s.buyText}>{amount}</Text>
-            </>
-          )}
-        </LinearGradient>
-      </Pressable>
+          <View style={s.buyFill}>
+            {soldOut ? (
+              <Text style={s.buyText}>SOLD OUT</Text>
+            ) : (
+              <>
+                <ResourceIcon kind={currency} size={19} />
+                <Text style={s.buyText}>{amount}</Text>
+              </>
+            )}
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -284,172 +282,193 @@ export function GameModal({
 
 const s = StyleSheet.create({
   button: {
-    borderWidth: 1,
-    borderColor: '#ffe3a0',
-    borderRadius: 13,
+    borderRadius: 3,
     overflow: 'hidden',
-    borderBottomWidth: 4,
-    borderBottomColor: '#76542c',
-    minHeight: 54,
+    minHeight: 52,
   },
-  secondaryButton: { borderColor: '#6c9274', borderBottomColor: '#0a2019' },
+  secondaryButton: { borderWidth: 1, borderColor: colors.border },
   buttonFill: {
-    paddingHorizontal: 24,
+    backgroundColor: colors.gold,
+    paddingHorizontal: 18,
     paddingVertical: 13,
-    minHeight: 50,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  secondaryFill: { backgroundColor: '#293229' },
   buttonText: {
     fontFamily: 'Barlow',
-    fontSize: 23,
+    fontSize: 21,
     letterSpacing: 1,
-    color: '#362510',
+    textAlign: 'center',
+    color: '#24281f',
   },
-  pressed: { opacity: 0.8, transform: [{ translateY: 2 }] },
+  pressed: { opacity: 0.8, transform: [{ translateY: 1 }] },
   disabled: { opacity: 0.45 },
   wallet: {
     flexDirection: 'row',
-    backgroundColor: '#102a27',
-    borderWidth: 1,
-    borderColor: '#7d714e',
-    borderRadius: 14,
-    paddingVertical: 9,
+    backgroundColor: '#151e19e8',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#b8ac7833',
+    paddingVertical: 8,
   },
   walletCell: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 7,
+    paddingHorizontal: 4,
   },
+  walletCopy: { flexShrink: 1 },
   walletLabel: {
     color: colors.muted,
-    fontSize: 10,
-    letterSpacing: 1,
+    fontSize: 9,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   walletValue: {
     color: colors.cream,
     fontFamily: 'Barlow',
-    fontSize: 24,
-    lineHeight: 25,
+    fontSize: 21,
+    fontVariant: ['tabular-nums'],
   },
   rewards: { gap: 12, alignItems: 'center', paddingVertical: 18 },
-  reward: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  reward: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
   rewardText: { fontFamily: 'Barlow', fontSize: 29, color: colors.cream },
   offer: {
-    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     minWidth: 0,
-    backgroundColor: '#1e302c',
-    borderWidth: 1,
-    borderColor: '#816a43',
-    borderRadius: 12,
-    padding: 8,
-    borderBottomWidth: 4,
-    borderBottomColor: '#0a1715',
+    backgroundColor: '#202a22f5',
+    borderBottomWidth: 1,
+    borderColor: '#c2b28029',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
   },
-  dailyOffer: { borderColor: '#b28c4e', padding: 6 },
+  dailyOffer: {
+    backgroundColor: '#2c3327f5',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.gold,
+    paddingVertical: 16,
+  },
   soldOut: { opacity: 0.65 },
   offerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 2,
-    minHeight: 23,
+    gap: 7,
+    marginBottom: 4,
   },
-  remaining: { fontFamily: 'Barlow', fontSize: 12, color: '#d4dec4' },
-  discount: { fontFamily: 'Barlow', fontSize: 14, color: colors.gold },
+  remaining: {
+    fontFamily: 'Barlow',
+    fontSize: 11,
+    letterSpacing: 0.5,
+    color: colors.muted,
+  },
+  discount: { fontFamily: 'Barlow', fontSize: 13, color: colors.gold },
   itemArt: {
+    width: 48,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    minHeight: 105,
-    paddingTop: 10,
-    borderWidth: 1,
-    borderColor: '#ffffff0b',
   },
+  dailyArt: { width: 54, minHeight: 70 },
   itemHalo: {
-    height: 60,
-    width: 60,
+    height: 48,
+    width: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#c2b28009',
     borderWidth: 1,
-    borderColor: '#ffffff18',
-    borderRadius: 30,
-    backgroundColor: '#ffffff06',
+    borderColor: '#c2b28022',
+    borderRadius: 4,
     transform: [{ rotate: '-8deg' }],
   },
+  offerInfo: { flex: 1, minWidth: 0 },
   itemQuantity: {
     fontFamily: 'Barlow',
-    fontSize: 27,
+    fontSize: 24,
     color: colors.cream,
-    marginTop: 2,
+    marginTop: 3,
   },
+  itemKind: { fontSize: 14, color: colors.muted },
   offerName: {
     fontFamily: 'Barlow',
-    fontSize: 18,
-    color: '#e9dabb',
-    textAlign: 'center',
-    height: 44,
-    marginTop: 8,
-    lineHeight: 21,
+    fontSize: 20,
+    color: colors.cream,
+    lineHeight: 23,
   },
+  offerPrice: { width: 76, gap: 5 },
   oldPrice: {
-    fontSize: 11,
+    fontSize: 10,
     textAlign: 'center',
-    color: '#a8b4a3',
+    color: colors.muted,
     textDecorationLine: 'line-through',
-    marginBottom: 6,
   },
   buyButton: {
-    minHeight: 44,
+    minHeight: 46,
     borderWidth: 1,
-    borderColor: '#83a979',
-    borderRadius: 7,
+    borderColor: '#a99a6a',
+    borderRadius: 3,
     overflow: 'hidden',
   },
   buyFill: {
+    backgroundColor: '#394433',
     flex: 1,
-    minHeight: 43,
+    minHeight: 44,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    padding: 5,
+    gap: 5,
   },
-  buyText: { fontFamily: 'Barlow', fontSize: 22, color: '#f5f5d5' },
+  buyText: {
+    fontFamily: 'Barlow',
+    fontSize: 21,
+    color: colors.cream,
+    textAlign: 'center',
+  },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: '#020b0cce',
+    backgroundColor: '#101610df',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 22,
+    padding: 20,
   },
   modalPanel: {
     width: '100%',
     maxWidth: 420,
     maxHeight: '85%',
-    backgroundColor: '#19322e',
-    borderWidth: 1,
+    backgroundColor: colors.panel,
+    borderTopWidth: 3,
     borderColor: colors.gold,
-    borderRadius: 20,
+    borderRadius: 4,
     overflow: 'hidden',
-    borderBottomWidth: 5,
-    borderBottomColor: '#80663b',
   },
   modalHeading: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 22,
+    paddingLeft: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#536047',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     flex: 1,
-    fontFamily: 'Barlow',
-    fontSize: 30,
+    fontFamily: 'Cinzel',
+    fontSize: 22,
     color: colors.cream,
+    paddingVertical: 16,
   },
   close: { padding: 16, minWidth: 48, minHeight: 48 },
-  modalBody: { padding: 22, gap: 14 },
+  modalBody: { padding: 20, gap: 14 },
 });

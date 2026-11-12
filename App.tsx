@@ -4,8 +4,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
-  Animated,
-  Easing,
   PanResponder,
   Platform,
   Pressable,
@@ -36,6 +34,7 @@ import {
 } from './src/game';
 import { gameStorage, newRequestId } from './src/storage';
 import DealerScene, { type DealerPointer } from './src/dealer/DealerScene';
+import type { DealerReaction } from './src/dealer/world';
 import BattlePassScreen from './src/BattlePassScreen';
 import PurchaseCelebration from './src/PurchaseCelebration';
 import type { BattlePassAction, BattlePassState } from './src/battlepass';
@@ -52,6 +51,15 @@ import {
 } from './src/ui';
 
 const addressKey = 'ember-and-rune.server';
+const dealerGreetings = [
+  { reaction: 'wave', dialogue: 'Welcome to my shop!' },
+  { reaction: 'bow', dialogue: 'Orin, at your service. Mind the hat.' },
+  {
+    reaction: 'chuckle',
+    dialogue: 'Ha! Even my bargains have a little charm.',
+  },
+  { reaction: 'flourish', dialogue: 'A little magic, just for you.' },
+] as const;
 type SelectedOffer = { offer: StaticOffer | DailyOffer; daily: boolean };
 type RewardReceipt = Pick<PurchaseReceipt, 'items' | 'resources'> & {
   title: string;
@@ -123,12 +131,16 @@ function Game() {
   const gestureStart = useRef({ x: 0, y: 0 });
   const didDrag = useRef(false);
   const gestureSize = useRef({ width, height });
-  const [greeting, setGreeting] = useState(1);
+  const [dealer, setDealer] = useState<{
+    greeting: number;
+    reaction: DealerReaction;
+    dialogue: string;
+  }>({
+    greeting: 1,
+    reaction: 'wave',
+    dialogue: 'Every rune has a story. Let’s find yours.',
+  });
   const [celebration, setCelebration] = useState(0);
-  const [dialogue, setDialogue] = useState(
-    'Every rune has a story. Let’s find yours.',
-  );
-  const entrance = useRef(new Animated.Value(0)).current;
   const gesture = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponderCapture: (_, movement) =>
@@ -290,7 +302,10 @@ function Game() {
       setSelection(null);
       setReceipt({ ...result, title: 'Treasure received' });
       setCelebration((value) => value + 1);
-      setDialogue('A fine choice! May it bring you good fortune.');
+      setDealer((current) => ({
+        ...current,
+        dialogue: 'A fine choice! May it bring you good fortune.',
+      }));
       if (!retry && !pending)
         setPlayer((current) =>
           current ? { ...current, resources: result.resources } : current,
@@ -346,11 +361,13 @@ function Game() {
           : {}),
       });
       setCelebration((value) => value + 1);
-      setDialogue(
-        actualAction === 'premium'
-          ? 'The golden path welcomes you, adventurer.'
-          : 'Well earned! Your journey grows brighter.',
-      );
+      setDealer((current) => ({
+        ...current,
+        dialogue:
+          actualAction === 'premium'
+            ? 'The golden path welcomes you, adventurer.'
+            : 'Well earned! Your journey grows brighter.',
+      }));
       try {
         const [current, offers, battlePass] = await Promise.all([
           client.current.refreshPlayer(),
@@ -424,16 +441,6 @@ function Game() {
     premiumConfirmation,
   ]);
 
-  useEffect(() => {
-    entrance.setValue(0);
-    Animated.timing(entrance, {
-      toValue: 1,
-      duration: 550,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: Platform.OS !== 'web',
-    }).start();
-  }, [screen]);
-
   const ready = fontsLoaded || !!fontError;
   const confirmPrice = selection
     ? selection.daily
@@ -447,7 +454,8 @@ function Game() {
       <View style={s.background}>
         <DealerScene
           shop={screen !== 'home' && !receipt}
-          greeting={greeting}
+          greeting={dealer.greeting}
+          reaction={dealer.reaction}
           celebration={celebration}
           celebrating={!!receipt}
           pointer={pointer}
@@ -457,8 +465,8 @@ function Game() {
             receipt
               ? ['#07151e10', '#07151e00', '#07151e30']
               : screen === 'home'
-              ? ['#07151e85', '#10212000', '#07151ed9']
-              : ['#07151e90', '#0b201c85', '#07151ef0']
+                ? ['#111b18c9', '#111b1800', '#111b18e8']
+                : ['#141d18e8', '#141d18a8', '#141d18f5']
           }
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
@@ -580,22 +588,11 @@ function Game() {
                     />
                   }
                 >
-                  <Animated.View
-                    style={{
-                      opacity: entrance,
-                      transform: [
-                        {
-                          translateY: entrance.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [12, 0],
-                          }),
-                        },
-                      ],
-                    }}
-                  >
-                    <Text style={s.eyebrow}>WELCOME TO</Text>
-                    <Text style={s.homeTitle}>The Rune Exchange</Text>
-                  </Animated.View>
+                  <View style={s.homeHeading}>
+                    <Text style={s.eyebrow}>THE WOODLAND MARKET</Text>
+                    <Text style={s.homeTitle}>The Rune{'\n'}Exchange</Text>
+                    <View style={s.headingRule} />
+                  </View>
                   <View
                     style={s.sceneSpace}
                     onLayout={(event) => {
@@ -612,29 +609,28 @@ function Game() {
                       }}
                       onPress={() => {
                         if (didDrag.current) return;
-                        setGreeting((value) => value + 1);
-                        const lines = [
-                          'Ah, a curious soul! Come a little closer.',
-                          'Fresh crystals. Ancient wisdom. Fair prices.',
-                          'Take your time. The magic isn’t going anywhere.',
-                        ];
-                        setDialogue(lines[greeting % lines.length]);
+                        setDealer((current) => ({
+                          ...dealerGreetings[
+                            (current.greeting - 1) % dealerGreetings.length
+                          ],
+                          greeting: current.greeting + 1,
+                        }));
                       }}
                     />
                   </View>
-                  <LinearGradient
-                    colors={['#173036e8', '#0d212aef']}
-                    style={s.adventurerCard}
-                  >
+                  <View style={s.adventurerCard}>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.welcome}>ORIN, THE RUNEKEEPER</Text>
-                      <Text style={s.dealerDialogue}>{dialogue}</Text>
-                      <Text selectable style={s.playerId}>
-                        Player {player.player_id.slice(0, 8)}
+                      <Text style={s.welcome}>Orin, the Runekeeper</Text>
+                      <Text
+                        style={s.dealerDialogue}
+                        testID="dealer-dialogue"
+                        accessibilityLiveRegion="polite"
+                      >
+                        {dealer.dialogue}
                       </Text>
                     </View>
                     <View style={s.online} accessibilityLabel="Connected" />
-                  </LinearGradient>
+                  </View>
                   <View style={s.homeAction}>
                     <GameButton
                       title="ENTER THE SHOP"
@@ -677,16 +673,22 @@ function Game() {
                     />
                   }
                 >
-                  <Text style={s.eyebrow}>THE MERCHANT’S COLLECTION</Text>
-                  <Text style={s.shopTitle}>The Shop</Text>
-                  <Text style={s.shopSubtitle}>
-                    Treasures for your next adventure.
-                  </Text>
+                  <View style={s.shopHeading}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.eyebrow}>ORIN’S COLLECTION</Text>
+                      <Text style={s.shopTitle}>The Shop</Text>
+                    </View>
+                    <Icon
+                      name="storefront-outline"
+                      size={33}
+                      color={colors.gold}
+                    />
+                  </View>
                   <View style={s.sectionHeader}>
                     <View>
                       <Text style={s.sectionTitle}>DAILY OFFERS</Text>
                       <Text style={s.sectionSubtitle}>
-                        A little rarer. A little more rewarding.
+                        Three finds. Here until midnight.
                       </Text>
                     </View>
                     <Icon name="weather-night" size={25} color={colors.gold} />
@@ -734,29 +736,23 @@ function Game() {
                     </View>
                     <Icon name="treasure-chest" size={25} color={colors.gold} />
                   </View>
-                  {shop &&
-                    Array.from(
-                      { length: Math.ceil(shop.static.slots.length / 2) },
-                      (_, index) => (
-                        <View style={s.staticRow} key={index}>
-                          {shop.static.slots
-                            .slice(index * 2, index * 2 + 2)
-                            .map((slot) => (
-                              <OfferCard
-                                key={slot.offer.offer_id}
-                                offer={slot.offer}
-                                disabled={busy || pending}
-                                onBuy={() =>
-                                  setSelection({
-                                    offer: slot.offer,
-                                    daily: false,
-                                  })
-                                }
-                              />
-                            ))}
-                        </View>
-                      ),
-                    )}
+                  {shop && (
+                    <View style={s.staticRow}>
+                      {shop.static.slots.map((slot) => (
+                        <OfferCard
+                          key={slot.offer.offer_id}
+                          offer={slot.offer}
+                          disabled={busy || pending}
+                          onBuy={() =>
+                            setSelection({
+                              offer: slot.offer,
+                              daily: false,
+                            })
+                          }
+                        />
+                      ))}
+                    </View>
+                  )}
                   <View style={s.shopFooter}>
                     <Icon
                       name="star-four-points"
@@ -804,7 +800,7 @@ function Game() {
                               : 'shield-star-outline'
                         }
                         size={26}
-                        color={screen === tab ? colors.gold : '#8aa497'}
+                        color={screen === tab ? colors.gold : colors.muted}
                       />
                       <Text
                         style={[
@@ -857,6 +853,11 @@ function Game() {
           busy={busy}
           onPress={() => void connect(address)}
         />
+        {player && (
+          <Text selectable style={s.playerId}>
+            Player {player.player_id.slice(0, 8)}
+          </Text>
+        )}
       </GameModal>
       <GameModal
         visible={!!selection}
@@ -976,16 +977,16 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 22,
-    paddingRight: 12,
-    minHeight: 52,
+    paddingLeft: 20,
+    paddingRight: 10,
+    minHeight: 48,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   wordmark: {
-    color: colors.gold,
+    color: colors.cream,
     fontFamily: 'Barlow',
-    fontSize: 17,
-    letterSpacing: 2.5,
+    fontSize: 15,
+    letterSpacing: 2.8,
   },
   iconButton: {
     width: 48,
@@ -993,23 +994,23 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  walletWrap: { marginHorizontal: 18, marginBottom: 6 },
+  walletWrap: { marginHorizontal: 20 },
   loading: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 28,
-    backgroundColor: '#0b211aa8',
+    backgroundColor: '#141d18c9',
   },
   crest: {
     width: 98,
     height: 98,
     borderWidth: 1,
     borderColor: colors.gold,
-    borderRadius: 30,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#19332fd9',
+    backgroundColor: '#263125d9',
     transform: [{ rotate: '-6deg' }],
   },
   loadingTitle: {
@@ -1019,158 +1020,156 @@ const s = StyleSheet.create({
     marginTop: 30,
     textAlign: 'center',
   },
-  subtitle: { color: '#d0d6bf', fontSize: 14, marginTop: 10 },
+  subtitle: { color: colors.muted, fontSize: 14, marginTop: 10 },
   loadingStatus: { color: colors.cream, marginTop: 12, fontSize: 13 },
   home: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 22,
-    minHeight: 420,
+    paddingTop: 24,
+    paddingBottom: 18,
+    minHeight: 435,
   },
+  homeHeading: { alignSelf: 'flex-start' },
   eyebrow: {
-    color: '#dfce9e',
-    fontSize: 10,
-    letterSpacing: 2.5,
-    textAlign: 'center',
+    color: colors.gold,
+    fontFamily: 'Barlow',
+    fontSize: 11,
+    letterSpacing: 2.4,
   },
   homeTitle: {
     fontFamily: 'Cinzel',
-    fontSize: 26,
-    color: '#fff0ca',
-    textAlign: 'center',
-    lineHeight: 34,
-    marginTop: 5,
-    textShadowColor: '#071e1d',
-    textShadowRadius: 14,
-    textShadowOffset: { width: 0, height: 3 },
+    fontSize: 34,
+    color: colors.cream,
+    lineHeight: 39,
+    marginTop: 7,
+    textShadowColor: '#111b18',
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 2 },
+  },
+  headingRule: {
+    width: 35,
+    height: 2,
+    backgroundColor: colors.gold,
+    marginTop: 15,
   },
   sceneSpace: { flex: 1, minHeight: 140 },
   adventurerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#9b8656',
-    borderRadius: 14,
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#18231cde',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.gold,
   },
-  welcome: {
-    color: colors.cream,
-    fontFamily: 'Barlow',
-    fontSize: 20,
-    letterSpacing: 0.5,
-  },
+  welcome: { color: colors.cream, fontFamily: 'Cinzel', fontSize: 17 },
   playerId: { color: colors.muted, fontSize: 12, marginTop: 4 },
   dealerDialogue: {
-    color: '#d3e1d5',
-    fontSize: 13,
+    color: '#d0d5c4',
+    fontSize: 12,
     lineHeight: 19,
-    marginTop: 4,
+    marginTop: 6,
   },
   online: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.green,
   },
-  homeAction: { marginTop: 15, gap: 11 },
-  homeFootnote: { color: '#a4b9a7', fontSize: 11, textAlign: 'center' },
-  shop: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 12 },
+  homeAction: { marginTop: 12, gap: 11 },
+  homeFootnote: { color: '#b7bfac', fontSize: 10, textAlign: 'center' },
+  shop: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 12 },
+  shopHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 23,
+  },
   shopTitle: {
     fontFamily: 'Cinzel',
     fontSize: 34,
     color: colors.cream,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  shopSubtitle: {
-    fontSize: 12,
-    color: colors.muted,
-    textAlign: 'center',
-    marginTop: 5,
-    marginBottom: 24,
+    marginTop: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#8c77455c',
-    paddingTop: 15,
+    gap: 12,
     marginBottom: 10,
   },
   sectionTitle: {
     fontFamily: 'Barlow',
-    fontSize: 27,
-    color: colors.gold,
-    letterSpacing: 1,
+    fontSize: 23,
+    color: colors.cream,
+    letterSpacing: 1.1,
   },
-  sectionSubtitle: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  sectionSubtitle: { fontSize: 11, color: colors.muted, marginTop: 3 },
   timer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 13,
+    marginBottom: 14,
   },
   timerText: {
-    color: '#ead7a7',
+    color: colors.gold,
     fontFamily: 'Barlow',
-    fontSize: 16,
-    minWidth: 80,
+    fontSize: 15,
+    fontVariant: ['tabular-nums'],
   },
-  timerHint: { color: '#99b4a2', fontSize: 11 },
-  dailyRow: { flexDirection: 'row', gap: 7, alignItems: 'stretch' },
-  staticRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  timerHint: { color: colors.muted, fontSize: 11, marginLeft: 3 },
+  dailyRow: { gap: 8 },
+  staticRow: { gap: 1 },
   shopEmpty: { gap: 16, paddingVertical: 24 },
   shopFooter: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 20,
+    paddingVertical: 24,
   },
-  footerText: { color: '#b5bd9e', fontSize: 11, fontStyle: 'italic' },
+  footerText: { color: colors.muted, fontSize: 11, fontStyle: 'italic' },
   bottomSafe: {
-    backgroundColor: '#0c211eeF',
+    backgroundColor: '#151e18f5',
     borderTopWidth: 1,
-    borderTopColor: '#8c7745',
+    borderTopColor: '#b7a97938',
   },
   navigation: {
     flexDirection: 'row',
-    paddingHorizontal: 40,
-    paddingTop: 5,
+    paddingHorizontal: 20,
     paddingBottom: 4,
-    gap: 26,
+    gap: 18,
   },
   navItem: {
     flex: 1,
-    paddingTop: 7,
-    paddingBottom: 6,
+    paddingTop: 10,
+    paddingBottom: 7,
     alignItems: 'center',
     gap: 3,
-    borderRadius: 10,
-    minHeight: 61,
+    borderTopWidth: 2,
+    borderTopColor: 'transparent',
+    minHeight: 63,
   },
-  navActive: { backgroundColor: '#2741359c' },
+  navActive: { borderTopColor: colors.gold, backgroundColor: '#c4b17908' },
   navText: {
-    color: '#8aa497',
+    color: colors.muted,
     fontFamily: 'Barlow',
-    fontSize: 15,
-    letterSpacing: 1.5,
+    fontSize: 12,
+    letterSpacing: 1.8,
   },
   notice: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4d352bf2',
-    borderWidth: 1,
-    borderColor: '#ad7e50',
-    marginHorizontal: 18,
+    backgroundColor: '#44342bf2',
+    borderLeftWidth: 2,
+    borderColor: '#d4a47b',
+    marginHorizontal: 20,
     marginVertical: 8,
-    borderRadius: 10,
   },
   noticeText: {
-    color: '#ffdfb1',
+    color: '#f2d6b4',
     fontSize: 12,
     lineHeight: 18,
     padding: 12,
@@ -1182,9 +1181,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pending: { marginHorizontal: 18, marginVertical: 8, gap: 10 },
+  pending: { marginHorizontal: 20, marginVertical: 8, gap: 10 },
   pendingText: { color: colors.cream, fontSize: 12, textAlign: 'center' },
-  body: { color: '#cad5c2', fontSize: 14, lineHeight: 21 },
+  body: { color: '#c9cfbe', fontSize: 14, lineHeight: 21 },
   inputLabel: {
     fontFamily: 'Barlow',
     fontSize: 16,
@@ -1193,17 +1192,17 @@ const s = StyleSheet.create({
     marginTop: 5,
   },
   input: {
-    backgroundColor: '#102620',
-    borderColor: '#71846b',
+    backgroundColor: '#17221a',
+    borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 9,
+    borderRadius: 3,
     padding: 13,
     color: colors.cream,
     minHeight: 50,
     fontSize: 14,
   },
   connectionError: {
-    color: '#ffd0a4',
+    color: '#f1c9a4',
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center',
@@ -1216,11 +1215,13 @@ const s = StyleSheet.create({
   },
   cost: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#586247',
+    borderColor: colors.border,
     paddingVertical: 15,
     marginBottom: 5,
   },

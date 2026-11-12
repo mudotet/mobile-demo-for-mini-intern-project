@@ -25,7 +25,7 @@ import {
   Vector3,
 } from 'three';
 import { Canvas, useFrame, useThree } from './fiber';
-import { createDealerWorld } from './world';
+import { createDealerWorld, type DealerReaction } from './world';
 
 // A refreshed module needs a new Expo GL context after native root cleanup.
 const sceneRevision = Date.now();
@@ -39,6 +39,7 @@ export type DealerPointer = {
 type SceneProps = {
   shop: boolean;
   greeting: number;
+  reaction?: DealerReaction;
   celebration: number;
   celebrating?: boolean;
   pointer: MutableRefObject<DealerPointer>;
@@ -49,6 +50,7 @@ type Metrics = {
   drawCalls: number;
   triangles: number;
   greetings: number;
+  reaction: DealerReaction;
   celebrations: number;
   contextLost: boolean;
   reducedMotion: boolean;
@@ -114,6 +116,7 @@ function World({
     invalidate();
   }, [
     input.current.greeting,
+    input.current.reaction,
     input.current.celebration,
     input.current.shop,
     input.current.celebrating,
@@ -130,7 +133,9 @@ function World({
       pointerX: state.pointer.current.x,
       pointerY: state.pointer.current.y,
       greeting: state.greeting,
+      reaction: state.reaction,
       celebration: state.celebration,
+      celebrating: state.celebrating,
       shop: state.shop,
       reducedMotion,
     });
@@ -160,6 +165,7 @@ function World({
     camera.lookAt(cameraFocus);
     metrics.frames += 1;
     metrics.greetings = state.greeting;
+    metrics.reaction = state.reaction || 'wave';
     metrics.celebrations = state.celebration;
     metrics.mode = state.celebrating
       ? 'celebration'
@@ -192,6 +198,7 @@ export default function DealerScene(props: SceneProps) {
       drawCalls: 0,
       triangles: 0,
       greetings: 0,
+      reaction: 'wave',
       celebrations: 0,
       contextLost: false,
       reducedMotion: false,
@@ -219,8 +226,8 @@ export default function DealerScene(props: SceneProps) {
   }, [generation]);
 
   useEffect(() => {
+    if (Platform.OS === 'web' || __DEV__) diagnostics.__dealerMetrics = metrics;
     if (Platform.OS === 'web') {
-      diagnostics.__dealerMetrics = metrics;
       const visibility = () => setActive(!document.hidden);
       const media = window.matchMedia('(prefers-reduced-motion: reduce)');
       const motion = () => setReducedMotion(media.matches);
@@ -253,6 +260,8 @@ export default function DealerScene(props: SceneProps) {
       app.remove();
       motion.remove();
       contextCleanup.current?.();
+      if (diagnostics.__dealerMetrics === metrics)
+        delete diagnostics.__dealerMetrics;
     };
   }, [metrics]);
 
@@ -348,14 +357,6 @@ export default function DealerScene(props: SceneProps) {
                     gl.outputColorSpace = SRGBColorSpace;
                     scene.background = new Color('#0c1822');
                     scene.fog = new FogExp2('#0c1822', 0.055);
-                    if (Platform.OS !== 'web') {
-                      const context = gl.getContext();
-                      const software = /software|swiftshader|llvmpipe/i.test(
-                        String(context.getParameter(context.RENDERER)),
-                      );
-                      setSoftwareRenderer(software);
-                      gl.shadowMap.enabled = !software;
-                    }
                     if (Platform.OS === 'web') {
                       const element = gl.domElement;
                       const lost = (event: Event) => {
@@ -366,11 +367,26 @@ export default function DealerScene(props: SceneProps) {
                       contextCleanup.current = () =>
                         element.removeEventListener('webglcontextlost', lost);
                     } else {
+                      const context = gl.getContext() as ReturnType<
+                        typeof gl.getContext
+                      > & {
+                        flushEXP: () => void;
+                      };
+                      const renderer = String(
+                        context.getParameter(context.RENDERER),
+                      );
+                      const software = /software|swiftshader|llvmpipe/i.test(
+                        renderer,
+                      );
+                      setSoftwareRenderer(software);
+                      gl.shadowMap.enabled = !software;
                       const renderFrame = gl.render.bind(gl);
                       gl.render = (renderScene, camera) => {
                         if (metrics.contextLost) return;
                         try {
                           renderFrame(renderScene, camera);
+                          // Software GL is CPU-bound; drain each frame before queuing another.
+                          if (software) context.flushEXP();
                         } catch {
                           fail();
                         }

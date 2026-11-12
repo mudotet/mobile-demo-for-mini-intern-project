@@ -40,13 +40,25 @@ async function screenshot(page, name) {
   return page.screenshot({ path: `${artifacts}/${name}.png` });
 }
 
+async function visibility(page, visible) {
+  await page.evaluate(visible => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visible ? 'visible' : 'hidden' });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => !visible });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, visible);
+}
+
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: 'no-preference' });
   const page = await context.newPage();
   let expectedContextLoss = false;
   let shopPurchaseRequests = 0;
+  const gameplayMutations = [];
   inspectErrors(page, () => expectedContextLoss);
-  page.on('request', request => { if (request.url().endsWith('/api/003002')) shopPurchaseRequests += 1; });
+  page.on('request', request => {
+    if (request.url().endsWith('/api/003002')) shopPurchaseRequests += 1;
+    if (/\/api\/(003002|00400[234])$/.test(request.url())) gameplayMutations.push(new URL(request.url()).pathname);
+  });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'ENTER THE SHOP', exact: true }).waitFor();
   const canvas = page.getByTestId('dealer-canvas').locator('canvas');
@@ -59,6 +71,74 @@ try {
   const secondFrame = await canvas.screenshot({ path: `${artifacts}/dealer-frame-b.png` });
   assert.notEqual(hash(firstFrame), hash(secondFrame), 'Rendered dealer pixels must animate across frames.');
   await screenshot(page, 'dealer-home');
+
+  const reactions = [];
+  const reactionPixels = [];
+  const reactionLines = new Map([
+    ['wave', 'Welcome to my shop!'],
+    ['bow', 'Orin, at your service. Mind the hat.'],
+    ['chuckle', 'Ha! Even my bargains have a little charm.'],
+    ['flourish', 'A little magic, just for you.'],
+  ]);
+  for (let index = 0; index < 4; index += 1) {
+    const before = await metrics(page);
+    await page.getByRole('button', { name: 'Greet Orin', exact: true }).click();
+    await page.waitForFunction(count => window.__dealerMetrics.greetings === count + 1, before.greetings);
+    const current = await metrics(page);
+    assert.ok(['wave', 'bow', 'chuckle', 'flourish'].includes(current.reaction), 'A tap must select a named Orin reaction.');
+    if (index) assert.notEqual(current.reaction, reactions.at(-1), 'Successive taps must not immediately repeat the same reaction.');
+    const line = await page.getByTestId('dealer-dialogue').innerText();
+    if (!index) {
+      assert.equal(current.reaction, 'wave');
+      assert.equal(line, 'Welcome to my shop!');
+    }
+    assert.equal(line, reactionLines.get(current.reaction), 'The automatic caption must match the selected reaction.');
+    assert.equal(current.celebrations, initial.celebrations, 'Greeting must not trigger a reward celebration.');
+    assert.equal(current.mode, 'home');
+    reactions.push(current.reaction);
+    await page.waitForTimeout(850);
+    reactionPixels.push(hash(await canvas.screenshot({ path: `${artifacts}/orin-reaction-${current.reaction}.png` })));
+    await page.waitForTimeout(1700);
+  }
+  assert.equal(new Set(reactions).size, 4, 'Four taps must expose all four distinct reactions.');
+  assert.equal(new Set(reactionPixels).size, 4, 'The four reaction captures must contain different rendered pixels.');
+  for (const viewport of [{ width: 320, height: 720 }, { width: 375, height: 667 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(250);
+    const greet = page.getByRole('button', { name: 'Greet Orin', exact: true });
+    await greet.click();
+    await page.waitForTimeout(850);
+    for (const locator of [greet, page.getByTestId('dealer-dialogue'), page.getByRole('button', { name: 'ENTER THE SHOP', exact: true })]) {
+      const box = await locator.boundingBox();
+      assert.ok(box && box.x >= -1 && box.x + box.width <= viewport.width + 1, 'The stage, automatic caption and shop action must fit the screen width.');
+      assert.ok(box.y >= 0 && box.y + box.height <= viewport.height, 'Talking must keep the stage, caption and shop action visible.');
+    }
+    for (const control of [greet, page.getByRole('button', { name: 'ENTER THE SHOP', exact: true })]) {
+      const box = await control.boundingBox();
+      assert.ok(box.width >= 44 && box.height >= 44, 'The greeting and shop action must retain usable tap targets.');
+    }
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true);
+    await page.screenshot({ path: `${artifacts}/orin-talking-home-${viewport.width}x${viewport.height}.png` });
+  }
+  for (let index = 0; index < 8; index += 1) {
+    const before = await metrics(page);
+    await page.getByRole('button', { name: 'Greet Orin', exact: true }).click();
+    await page.waitForFunction(count => window.__dealerMetrics.greetings === count + 1, before.greetings);
+    const current = await metrics(page);
+    assert.notEqual(current.reaction, before.reaction, 'Rapid taps must keep advancing without immediate repeats.');
+    assert.equal(await page.getByTestId('dealer-dialogue').innerText(), reactionLines.get(current.reaction), 'Rapid taps must keep the reaction and its quip paired.');
+  }
+  assert.deepEqual(gameplayMutations, [], 'Greeting interactions must not send gameplay mutations.');
+  assert.equal((await metrics(page)).celebrations, initial.celebrations);
+  await visibility(page, false);
+  await page.waitForTimeout(150);
+  const hiddenReaction = await metrics(page);
+  await page.waitForTimeout(500);
+  assert.ok((await metrics(page)).frames <= hiddenReaction.frames + 1, 'An active talking reaction must pause in the background.');
+  assert.equal((await metrics(page)).animationTime, hiddenReaction.animationTime);
+  await visibility(page, true);
+  await page.waitForFunction(frames => window.__dealerMetrics.frames > frames + 2, hiddenReaction.frames);
+  await page.waitForTimeout(3000);
 
   const greetingBefore = (await metrics(page)).greetings;
   await page.getByRole('button', { name: 'Greet Orin', exact: true }).click();
@@ -258,20 +338,12 @@ try {
   await page.getByRole('button', { name: 'ENTER THE SHOP', exact: true }).click();
   await screenshot(page, 'dealer-shop-small');
 
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
+  await visibility(page, false);
   await page.waitForTimeout(150);
   const hiddenFrames = (await metrics(page)).frames;
   await page.waitForTimeout(500);
   assert.ok((await metrics(page)).frames <= hiddenFrames + 1, 'Scene should stop rendering while the document is hidden.');
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
+  await visibility(page, true);
   await page.waitForFunction(frames => window.__dealerMetrics.frames > frames + 2, hiddenFrames);
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -300,6 +372,21 @@ try {
   assert.ok((await metrics(page)).frames <= manualReduced.frames + 1, 'Manual orbit with Reduce Motion must settle without continuous animation.');
   assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - cameraYaw(manualReduced.camera)) < 0.01);
   await screenshot(page, 'dealer-reduced-motion-orbit');
+
+  const beforeReducedGreeting = await metrics(page);
+  const mutationsBeforeReducedGreeting = gameplayMutations.length;
+  await page.getByRole('button', { name: 'Greet Orin', exact: true }).click();
+  await page.waitForFunction(count => window.__dealerMetrics.greetings === count + 1, beforeReducedGreeting.greetings);
+  const reducedGreeting = await metrics(page);
+  assert.notEqual(reducedGreeting.reaction, beforeReducedGreeting.reaction);
+  assert.equal(await page.getByTestId('dealer-dialogue').innerText(), reactionLines.get(reducedGreeting.reaction));
+  assert.equal(reducedGreeting.celebrations, beforeReducedGreeting.celebrations);
+  await page.waitForTimeout(200);
+  const settledGreetingFrames = (await metrics(page)).frames;
+  await page.waitForTimeout(500);
+  assert.ok((await metrics(page)).frames <= settledGreetingFrames + 1, 'A reduced-motion greeting must update its caption and settle without continuous frames.');
+  assert.equal(gameplayMutations.length, mutationsBeforeReducedGreeting);
+  await screenshot(page, 'orin-reduced-tap');
 
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.waitForFunction(() => window.__dealerMetrics.reducedMotion === false);
@@ -350,7 +437,7 @@ try {
 
   console.log(`Dealer rendered ${summary.drawCalls} draw calls and ${summary.triangles} triangles, approximately ${observedFps.toFixed(1)} frames/s in local headless Chrome.`);
   console.log(`Animation advanced ${stalledAnimationAdvance.toFixed(3)} s after a 350 ms main-thread stall.`);
-  console.log(`Verified moving pixels, greeting, retained mouse/touch orbit, opposite viewpoints, normal vertical scrolling, camera transition, successful-purchase celebration, responsive layouts, visibility pause, reduced motion, context loss/retry, unsupported WebGL fallback with working purchase. Screenshots: ${artifacts}`);
+  console.log(`Verified four talking reactions with paired automatic quips, first-tap welcome, rapid taps without mutations/celebrations, moving pixels, retained mouse/touch orbit, opposite viewpoints, normal vertical scrolling, camera transition, successful-purchase celebration, responsive layouts, visibility pause, reduced motion, context loss/retry, unsupported WebGL fallback with working purchase. Screenshots: ${artifacts}`);
 } finally {
   await browser.close();
 }

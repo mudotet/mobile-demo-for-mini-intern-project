@@ -5,10 +5,16 @@ The app signs in automatically, opens a real-time 3D fantasy merchant scene, and
 Purchases require confirmation and display the server's actual rewards.
 All interface text is English.
 
-Orin is an original animated dealer with eye tracking, blinking, breathing, a greeting gesture, and a levitating crystal.
-Touch him to greet him, or drag horizontally across the character to orbit the camera and shift his gaze.
+Orin is an original animated dealer with eye tracking, blinking, breathing, and a levitating crystal.
+Tap him to trigger a short speaking animation with an automatic caption.
+The first tap waves with “Welcome to my shop!”, and later taps cycle through a bow, an amused chuckle, and a crystal flourish without repeating the previous tap reaction.
+His mouth, lower beard, head, and hands move together for 2.4 seconds before settling back to idle.
+Rapid taps select the latest reaction and its matching caption together.
+These gestures are silent NPC animations, with no chat input or player replies.
+Drag horizontally across the character to orbit the camera and shift his gaze.
 The camera retains its angle after release, and vertical swipes scroll Home.
-Reduce Motion allows direct camera control while keeping idle animations paused.
+Reduce Motion allows direct camera control and changes the caption and settled expression without continuous animation.
+Turning motion back on does not replay earlier taps.
 Opening the shop moves the camera through the same 3D scene.
 A confirmed purchase opens a full-screen celebration with the same live 3D Orin brought closer to the camera.
 The game interface yields to his cheering animation, a reward burst, and a compact Collect control.
@@ -19,6 +25,7 @@ React Three Fiber 9.8.1 supports React 19.3 and includes the native renderer in 
 Animation pauses in the background and respects Reduce Motion.
 The scene has a Retry control for graphics initialization or context failures.
 A native driver reporting software rendering uses vertex-lit materials, skips shadow maps, and draws at logical pixel resolution before native scaling to reduce CPU work.
+Software rendering waits for each native GL frame to drain so tap reactions do not sit behind a backlog of old frames.
 Refreshing the scene module recreates its GL context to recover the native renderer after Fast Refresh.
 Editing `App.tsx` also remounts the development screen so the native GL tree starts cleanly; the saved Device reconnects automatically.
 
@@ -157,7 +164,7 @@ Browser checks use installed Chrome or Playwright Chromium.
 Set `CHROME_EXECUTABLE` to override the executable path.
 Screenshots are written to the ignored `artifacts/` directory.
 Client tests cover lost responses, retry identity, session renewal, storage failures, and concurrent purchase taps.
-Geometry tests check animation transforms, mesh budgets, reduced-motion poses, and GPU resource disposal.
+Geometry tests check all four greeting poses, visible speech movement, rapid-tap settling, celebration priority, mesh budgets, reduced-motion poses, and GPU resource disposal.
 The 3D browser checks verify changing rendered pixels, touch interaction, camera movement, server-confirmed celebrations, background pause, reduced motion, and WebGL recovery.
 Live smoke tests create a fresh Player in the configured local backend.
 Browser checks verify the React Native web build and actual backend responses.
