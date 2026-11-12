@@ -1,0 +1,58 @@
+{
+  "name": "ember-and-rune",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-three/fiber": "9.8.1",
+    "expo": "~58.0.24",
+    "expo-asset": "~58.0.21",
+    "expo-constants": "~58.0.16",
+    "expo-crypto": "~58.0.8",
+    "expo-font": "~58.0.12",
+    "expo-gl": "~58.0.4",
+    "expo-linear-gradient": "~58.0.4",
+    "expo-secure-store": "~58.0.3",
+    "expo-status-bar": "~58.0.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-web": "^0.21.4",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "~19.3.0",
+    "@types/three": "^0.180.0",
+    "playwright": "^1.65.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/game.test.ts tests/dealer.test.ts tests/battlepass.test.ts",
+    "export:web": "expo export --platform web",
+    "preview": "node scripts/preview-server.mjs",
+    "backend": "bash scripts/start-backend.sh",
+    "test:live": "node tests/live-smoke.mjs",
+    "test:e2e": "node tests/browser-smoke.mjs",
+    "test:3d": "node tests/dealer-browser.mjs",
+    "test:battlepass": "node tests/battlepass-smoke.mjs"
+  },
+  "private": true,
+  "engines": {
+    "node": "^22.13.0 || ^24.3.0 || >=26.0.0"
+  },
+  "overrides": {
+    "@expo/fingerprint": {
+      ".": "0.21.10",
+      "minimatch": "^11.0.1"
+    }
+  }
+}

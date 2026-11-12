@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Ember & Rune",
+    "slug": "ember-and-rune",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#101e20",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.minigame.emberandrune",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connect to your local game server over Wi-Fi.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.minigame.emberandrune"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      "expo-asset",
+      "expo-status-bar"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Ember & Rune",
+      "favicon": "./assets/woodland-shop.png"
+    }
+  }
+}
