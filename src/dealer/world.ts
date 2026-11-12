@@ -10,7 +10,7 @@ export type DealerInteraction = {
 };
 
 /** Original, texture-free character and set, shared by native and web renderers. */
-export function createDealerWorld() {
+export function createDealerWorld(softwareRenderer = false) {
   const root = new THREE.Group();
   root.name = 'ember-rune-dealer-world';
   const geometries = new Set<THREE.BufferGeometry>();
@@ -21,11 +21,9 @@ export function createDealerWorld() {
     return value;
   };
   const material = (color: number, roughness = 0.65, metalness = 0) => {
-    const value = new THREE.MeshStandardMaterial({
-      color,
-      roughness,
-      metalness,
-    });
+    const value = softwareRenderer
+      ? new THREE.MeshLambertMaterial({ color })
+      : new THREE.MeshStandardMaterial({ color, roughness, metalness });
     materials.add(value);
     return value;
   };
@@ -877,6 +875,39 @@ export function createDealerWorld() {
   particles.frustumCulled = false;
   root.add(particles);
 
+  const burstCount = 48;
+  const burstGeometry = geometry(new THREE.BufferGeometry());
+  const burstPositions = new Float32Array(burstCount * 3);
+  const burstColors = new Float32Array(burstCount * 3);
+  for (let index = 0; index < burstCount; index++) {
+    const color = new THREE.Color(index % 3 ? 0xffd78a : 0x80f1dd);
+    color.toArray(burstColors, index * 3);
+  }
+  burstGeometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(burstPositions, 3),
+  );
+  burstGeometry.setAttribute(
+    'color',
+    new THREE.BufferAttribute(burstColors, 3),
+  );
+  const burstMaterial = new THREE.PointsMaterial({
+    size: 0.065,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  materials.add(burstMaterial);
+  const rewardBurst = new THREE.Points(burstGeometry, burstMaterial);
+  rewardBurst.name = 'purchase-reward-spark-burst';
+  rewardBurst.frustumCulled = false;
+  rewardBurst.visible = false;
+  root.add(rewardBurst);
+  const smile = head.getObjectByName('smiling-mouth')!;
+  const teeth = head.getObjectByName('friendly-smile-teeth')!;
+
   let lastGreeting = 0;
   let lastCelebration = 0;
   let greetingStarted = -100;
@@ -911,8 +942,8 @@ export function createDealerWorld() {
       !still && greetingAge < 2 ? Math.sin((greetingAge / 2) * Math.PI) : 0;
     const celebrationAge = time - celebrationStarted;
     const celebration =
-      !still && celebrationAge < 2.4
-        ? Math.sin((celebrationAge / 2.4) * Math.PI)
+      !still && celebrationAge < 3
+        ? Math.sin((celebrationAge / 3) * Math.PI)
         : 0;
     const pointerX = Number.isFinite(interaction.pointerX)
       ? THREE.MathUtils.clamp(interaction.pointerX, -1, 1)
@@ -928,26 +959,34 @@ export function createDealerWorld() {
     );
     head.rotation.x = THREE.MathUtils.lerp(
       head.rotation.x,
-      still ? 0 : pointerY * 0.07 + greeting * 0.18 - celebration * 0.07,
+      still ? 0 : pointerY * 0.07 + greeting * 0.18 - celebration * 0.13,
       ease,
     );
     head.rotation.z = still
       ? 0
-      : Math.sin(idle * 0.65) * 0.025 - greeting * 0.065;
+      : Math.sin(idle * 0.65) * 0.025 -
+        greeting * 0.065 +
+        celebration * Math.sin(celebrationAge * 7) * 0.06;
     merchant.position.y = still
       ? 0
       : Math.sin(idle * 1.6) * 0.014 +
-        celebration * Math.abs(Math.sin(celebrationAge * 7)) * 0.045;
+        celebration * Math.abs(Math.sin(celebrationAge * 5)) * 0.13;
     merchant.rotation.y = THREE.MathUtils.lerp(
       merchant.rotation.y,
       interaction.shop && !still ? -0.035 : 0,
       ease,
     );
-    greetingArm.rotation.z = still ? 0 : -greeting * 0.28;
-    greetingArm.rotation.x = still ? 0 : -greeting * 0.25;
+    greetingArm.rotation.z = still
+      ? 0
+      : -greeting * 0.28 -
+        celebration * (1.4 + Math.sin(celebrationAge * 11) * 0.25);
+    greetingArm.rotation.x = still ? 0 : -greeting * 0.25 - celebration * 0.18;
     crystalArm.rotation.x = still
       ? 0
-      : Math.sin(idle * 1.3) * 0.025 - celebration * 0.16;
+      : Math.sin(idle * 1.3) * 0.025 - celebration * 0.35;
+    crystalArm.rotation.z = still ? 0 : celebration * 0.65;
+    smile.scale.y = 0.105 * (1 + celebration * 0.65);
+    teeth.scale.y = 0.037 * (1 + celebration * 0.3);
     hat.rotation.z = still
       ? 0
       : Math.sin(idle * 1.1 + 0.5) * 0.012 + greeting * 0.09;
@@ -971,7 +1010,7 @@ export function createDealerWorld() {
       2.23 + (still ? 0 : Math.sin(idle * 1.7) * 0.07) + celebration * 0.18;
     crystal.rotation.y = still ? 0.35 : idle * 0.55;
     crystal.rotation.z = still ? 0.12 : Math.sin(idle * 0.8) * 0.13;
-    magic.scale.setScalar(1 + celebration * 0.22);
+    magic.scale.setScalar(1 + celebration * 0.38);
     runeRings.forEach((ring, index) => {
       ring.rotation.y =
         (index ? 0.9 : 0) + (still ? 0 : idle * (index ? -0.35 : 0.45));
@@ -996,6 +1035,20 @@ export function createDealerWorld() {
         0.3 + Math.cos(phase + idle * 0.35) * spread * 0.5;
     }
     particleGeometry.attributes.position.needsUpdate = true;
+    rewardBurst.visible = celebration > 0.01;
+    burstMaterial.opacity = Math.max(0, 1 - celebrationAge / 3) * 0.95;
+    if (rewardBurst.visible) {
+      const life = celebrationAge / 3;
+      for (let index = 0; index < burstCount; index++) {
+        const angle = index * 2.39996;
+        const radius = 0.15 + Math.pow(life, 0.65) * (1.1 + (index % 7) * 0.12);
+        burstPositions[index * 3] = Math.sin(angle) * radius;
+        burstPositions[index * 3 + 1] =
+          2.1 + (0.4 + (index % 5) / 5) * life * 2.8 - life * life * 1.6;
+        burstPositions[index * 3 + 2] = 0.9 + Math.cos(angle) * radius * 0.6;
+      }
+      burstGeometry.attributes.position.needsUpdate = true;
+    }
   };
   update(0, 0, {
     pointerX: 0,

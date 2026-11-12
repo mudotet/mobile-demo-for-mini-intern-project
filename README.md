@@ -6,15 +6,21 @@ Purchases require confirmation and display the server's actual rewards.
 All interface text is English.
 
 Orin is an original animated dealer with eye tracking, blinking, breathing, a greeting gesture, and a levitating crystal.
-Touch him to greet him, or drag across the character to shift his gaze and the camera.
+Touch him to greet him, or drag horizontally across the character to orbit the camera and shift his gaze.
+The camera retains its angle after release, and vertical swipes scroll Home.
+Reduce Motion allows direct camera control while keeping idle animations paused.
 Opening the shop moves the camera through the same 3D scene.
-A confirmed purchase returns the camera to Orin for his celebration, with rewards in a bottom panel.
-Collecting the rewards returns to the shop.
+A confirmed purchase opens a full-screen celebration with the same live 3D Orin brought closer to the camera.
+The game interface yields to his cheering animation, a reward burst, and a compact Collect control.
+Tap Orin to repeat the celebration, then collect the rewards to return to the previous screen.
 
 Three.js and React Three Fiber render the scene through WebGL on web and Expo GL on iPhone.
 React Three Fiber 9.8.1 supports React 19.3 and includes the native renderer in its published package.
 Animation pauses in the background and respects Reduce Motion.
 The scene has a Retry control for graphics initialization or context failures.
+A native driver reporting software rendering uses vertex-lit materials, skips shadow maps, and draws at logical pixel resolution before native scaling to reduce CPU work.
+Refreshing the scene module recreates its GL context to recover the native renderer after Fast Refresh.
+Editing `App.tsx` also remounts the development screen so the native GL tree starts cleanly; the saved Device reconnects automatically.
 
 ## Clone
 
@@ -23,11 +29,11 @@ The backend repository includes it as the `mobile/` Git submodule.
 To run the client and backend together, initialize the submodules in the parent checkout.
 
 ```bash
-git clone --recurse-submodules https://github.com/mudotet/mini-intern-server-project.git
+git clone --branch release/mobile-demo-2026-11-12 --recurse-submodules https://github.com/mudotet/mini-intern-server-project.git
 cd mini-intern-server-project/mobile
 ```
 
-For an existing parent checkout, run `git submodule update --init --recursive` from its root.
+For an existing parent checkout, switch to `release/mobile-demo-2026-11-12`, then run `git submodule update --init --recursive` from its root.
 The parent repository pins a specific mobile commit.
 
 To work on the mobile client independently, clone this repository.
@@ -104,6 +110,8 @@ Device credentials belong to each server origin, so changing the hostname, IP, s
 The demo pass has six milestones at 100 through 600 EXPBP, with separate Free and Premium rewards.
 The ladder places higher milestones above lower milestones and shows all twelve reward nodes.
 The featured reward and Premium control stay beside the scrolling ladder.
+A bright rail connects milestone shields, with reached segments highlighted in gold.
+Opening Pass or returning to Milestones centers the current EXPBP milestone; ordinary refreshes preserve manual scrolling.
 The weekly season starts Monday at 00:00 Asia/Ho_Chi_Minh.
 Daily quests reset at midnight in the same timezone and grant 100 EXPBP for one purchase, 150 EXPBP for three purchases, and 100 EXPBP for receiving 200 XP through Shop purchases.
 Claiming a quest adds EXPBP without changing Player XP, and milestone claims retain cumulative EXPBP.
@@ -156,8 +164,9 @@ Browser checks verify the React Native web build and actual backend responses.
 Battle Pass browser checks cover quest progress, Free/Premium claims, cancellation, server-confirmed celebrations, restart persistence, and a lost claim response retried exactly once.
 Physical iPhone rendering, SecureStore, and LAN permission prompts require an on-device check.
 
-The new `game/app/battle_pass.proto` schema currently exists as a local change inside the shared protocol Git submodule.
-Publish it and update the submodule revision when preparing a reproducible repository commit.
+The compatible backend and `game/app/battle_pass.proto` schema are published on `release/mobile-demo-2026-11-12` in their respective repositories.
+Clone that backend branch recursively to use its pinned schema and mobile revisions.
+The backend main branch has a separate Battle Pass contract.
 
 ## Artwork
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -147,6 +147,12 @@ function RewardNode({
         : `${milestone.required_expbp} EXPBP`;
   return (
     <View style={s.ladderRow} testID={`pass-node-${node.node_id}`}>
+      {reached && (
+        <View
+          style={s.railReached}
+          testID={`pass-rail-reached-${node.node_id}`}
+        />
+      )}
       <View style={s.stepPosition}>
         <StepShield step={milestone.step} reached={reached} />
       </View>
@@ -250,6 +256,12 @@ export default function BattlePassScreen({
 }: Props) {
   const [section, setSection] = useState<"milestones" | "quests">("milestones");
   const [availableHeight, setAvailableHeight] = useState<number | null>(null);
+  const ladderRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const ladderSize = useRef({ height: 0, contentHeight: 0 });
+  const milestoneLayouts = useRef(
+    new Map<number, { y: number; height: number }>(),
+  );
+  const positionedAt = useRef<string | null>(null);
   const compact =
     useWindowDimensions().height < 740 ||
     (availableHeight !== null && availableHeight < 650);
@@ -266,6 +278,44 @@ export default function BattlePassScreen({
     ? [...pass.milestones].sort((a, b) => b.step - a.step)
     : [];
   const featured = milestones[0];
+  const currentMilestone =
+    milestones.find(
+      (milestone) => milestone.required_expbp <= (pass?.expbp || 0),
+    ) || milestones.at(-1);
+  const currentStep = currentMilestone?.step;
+  const positionKey =
+    pass && section === "milestones" && !hidden
+      ? `${pass.pass_id}:${currentStep}`
+      : null;
+  const positionLadder = useCallback(() => {
+    const layout =
+      currentStep === undefined
+        ? undefined
+        : milestoneLayouts.current.get(currentStep);
+    const { height, contentHeight } = ladderSize.current;
+    if (
+      !positionKey ||
+      positionedAt.current === positionKey ||
+      !layout ||
+      !height ||
+      contentHeight < layout.y + layout.height - 1 ||
+      !ladderRef.current
+    )
+      return;
+    const y = Math.max(
+      0,
+      Math.min(
+        contentHeight - height,
+        layout.y + layout.height / 2 - height / 2,
+      ),
+    );
+    ladderRef.current.scrollTo({ y, animated: false });
+    positionedAt.current = positionKey;
+  }, [positionKey, currentStep]);
+  useEffect(() => {
+    positionedAt.current = null;
+    positionLadder();
+  }, [positionLadder]);
   const [featuredKind, featuredQuantity] = featured
     ? Object.entries(featured.premium.items)[0]
     : ["gem", 0];
@@ -512,31 +562,60 @@ export default function BattlePassScreen({
                 </View>
               </View>
               <ScrollView
+                ref={ladderRef}
                 testID="pass-ladder"
+                onLayout={(event) => {
+                  ladderSize.current.height = event.nativeEvent.layout.height;
+                  positionedAt.current = null;
+                  positionLadder();
+                }}
+                onContentSizeChange={(_, height) => {
+                  ladderSize.current.contentHeight = height;
+                  positionLadder();
+                }}
                 style={s.ladder}
                 contentContainerStyle={s.ladderContent}
                 refreshControl={refreshControl}
                 showsVerticalScrollIndicator={false}
               >
-                <View style={s.railLine} />
-                {milestones.flatMap((milestone) =>
-                  ([true, false] as const).map((premium) => {
-                    const node = premium ? milestone.premium : milestone.free;
-                    return (
-                      <RewardNode
-                        key={node.node_id}
-                        node={node}
-                        milestone={milestone}
-                        premium={premium}
-                        owned={pass.premium_owned}
-                        disabled={disabled}
-                        reached={milestone.required_expbp <= pass.expbp}
-                        onClaim={() => onAction("claim", node.node_id)}
-                        onPremium={onPremium}
-                      />
-                    );
-                  }),
-                )}
+                <View style={s.railLine} testID="pass-milestone-rail" />
+                {milestones.map((milestone) => (
+                  <View
+                    key={milestone.step}
+                    testID={
+                      milestone.step === currentStep
+                        ? "pass-current-milestone"
+                        : undefined
+                    }
+                    onLayout={(event) => {
+                      const { y, height } = event.nativeEvent.layout;
+                      milestoneLayouts.current.set(milestone.step, {
+                        y,
+                        height,
+                      });
+                      if (milestone.step === currentStep)
+                        positionedAt.current = null;
+                      positionLadder();
+                    }}
+                  >
+                    {([true, false] as const).map((premium) => {
+                      const node = premium ? milestone.premium : milestone.free;
+                      return (
+                        <RewardNode
+                          key={node.node_id}
+                          node={node}
+                          milestone={milestone}
+                          premium={premium}
+                          owned={pass.premium_owned}
+                          disabled={disabled}
+                          reached={milestone.required_expbp <= pass.expbp}
+                          onClaim={() => onAction("claim", node.node_id)}
+                          onPremium={onPremium}
+                        />
+                      );
+                    })}
+                  </View>
+                ))}
               </ScrollView>
             </View>
           ) : (
@@ -939,13 +1018,27 @@ const s = StyleSheet.create({
   ladderContent: { paddingTop: 8, paddingBottom: 24 },
   railLine: {
     position: "absolute",
-    left: 16,
+    left: 13,
     top: 8,
     bottom: 0,
-    width: 3,
-    backgroundColor: "#768b91",
-    borderLeftWidth: 1,
-    borderLeftColor: "#b0b6a3",
+    width: 8,
+    backgroundColor: "#9bbdce",
+    borderWidth: 2,
+    borderColor: "#d0e4ec",
+    borderRadius: 4,
+    boxShadow: "0 0 8px #85c9ed70",
+  },
+  railReached: {
+    position: "absolute",
+    left: 13,
+    top: 0,
+    bottom: 0,
+    width: 8,
+    borderRadius: 4,
+    backgroundColor: "#f8cc68",
+    borderWidth: 2,
+    borderColor: "#fff1af",
+    boxShadow: "0 0 10px #ffbe4990",
   },
   ladderRow: { paddingLeft: 27, paddingBottom: 15, minWidth: 0 },
   stepPosition: { position: "absolute", left: -3, top: 39, zIndex: 2 },

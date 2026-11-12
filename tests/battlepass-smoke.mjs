@@ -104,20 +104,39 @@ try {
     await page.screenshot({ path: `${artifacts}/${name}.png` });
   }
 
+  async function currentMilestone(step, centered = true) {
+    await page.waitForFunction(({ step, centered }) => {
+      const group = document.querySelector('[data-testid="pass-current-milestone"]');
+      const ladder = document.querySelector('[data-testid="pass-ladder"]');
+      if (!group || !ladder || !group.querySelector(`[data-testid="pass-node-premium_${step}"]`)
+        || !group.querySelector(`[data-testid="pass-node-free_${step}"]`)) return false;
+      const current = group.getBoundingClientRect();
+      const viewport = ladder.getBoundingClientRect();
+      return current.top < viewport.bottom && current.bottom > viewport.top
+        && (!centered || Math.abs(current.y + current.height / 2 - viewport.y - viewport.height / 2) <= 24);
+    }, { step, centered }, { timeout: 5000 });
+  }
+
   async function verifyLadderLayout() {
     const expectedOrder = [6, 5, 4, 3, 2, 1].flatMap(step => [`premium_${step}`, `free_${step}`]);
     for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
       await page.setViewportSize(viewport);
+      // React Native commits its compact layout after the browser resize event.
+      await page.waitForTimeout(250);
       const banner = page.getByTestId('pass-season-banner');
       const featured = page.getByTestId('pass-featured-panel');
       const ladder = page.getByTestId('pass-ladder');
       await ladder.waitFor();
+      await currentMilestone(1, false);
+      await page.screenshot({ path: `${artifacts}/pass-current-0-${viewport.width}.png` });
       await ladder.evaluate(element => { element.scrollTop = 0; });
       const [bannerBox, featuredBox, ladderBox, premiumBox, expBox] = await Promise.all([
         banner.boundingBox(), featured.boundingBox(), ladder.boundingBox(),
         page.getByRole('button', { name: 'Unlock Premium', exact: true }).boundingBox(),
         page.getByTestId('pass-expbp').boundingBox(),
       ]);
+      const railBox = await page.getByTestId('pass-milestone-rail').boundingBox();
+      assert.ok(railBox.width >= 8 && railBox.height >= ladderBox.height, 'The continuous milestone rail must remain at least8px wide through the ladder.');
       for (const box of [bannerBox, featuredBox, ladderBox, premiumBox, expBox]) {
         assert.ok(box && box.width > 0 && box.height > 0);
         assert.ok(box.x >= -1 && box.x + box.width <= viewport.width + 1, 'Battle Pass content must fit the viewport width.');
@@ -142,7 +161,8 @@ try {
       await page.mouse.wheel(0, 600);
       await page.waitForFunction(() => document.querySelector('[data-testid="pass-ladder"]').scrollTop > 50);
       const afterScroll = await featured.boundingBox();
-      assert.ok(Math.abs(afterScroll.x - featuredBox.x) <= 1 && Math.abs(afterScroll.y - featuredBox.y) <= 1, 'The featured panel must stay pinned while the ladder scrolls.');
+      assert.ok(Math.abs(afterScroll.x - featuredBox.x) <= 1 && Math.abs(afterScroll.y - featuredBox.y) <= 1,
+        `Featured panel moved at ${viewport.width}×${viewport.height}: before ${JSON.stringify(featuredBox)}, after ${JSON.stringify(afterScroll)}.`);
       const movedNode = await ladder.getByTestId('pass-node-premium_6').boundingBox();
       assert.ok(movedNode.y < nodes[0].y - 50, 'The ladder must actually move independently.');
       await page.screenshot({ path: `${artifacts}/pass-ladder-scrolled-${viewport.width}.png` });
@@ -166,6 +186,13 @@ try {
   assert.equal(await page.getByRole('button', { name: /^Locked free_/ }).count(), 6);
   assert.equal(await page.getByRole('button', { name: /^Unlock Premium for premium_/ }).count(), 6);
   assert.equal(await page.getByRole('button', { name: 'Locked free_1: 100 EXPBP required', exact: true }).isDisabled(), true);
+  await currentMilestone(1, false);
+  const initialLadderBox = await page.getByTestId('pass-ladder').boundingBox();
+  const firstRewardBox = await page.getByTestId('pass-node-free_1').boundingBox();
+  await page.screenshot({ path: `${artifacts}/pass-current-0.png` });
+  assert.ok(firstRewardBox.y < initialLadderBox.y + initialLadderBox.height
+    && firstRewardBox.y + firstRewardBox.height > initialLadderBox.y,
+  `Opening a zero-EXPBP pass must show milestone1. Reward y=${firstRewardBox.y}, viewport bottom=${initialLadderBox.y + initialLadderBox.height}.`);
   await verifyLadderLayout();
   await screenshot('pass-milestones');
 
@@ -190,6 +217,7 @@ try {
   assert.equal(questReceipt.resources.find(item => item.resource_id === 'xp').quantity, '100');
   await expbp(100);
   await page.getByRole('tab', { name: 'Milestones', exact: true }).click();
+  await currentMilestone(1, false);
   await page.getByRole('button', { name: 'Claim free_1', exact: true }).click();
   await collect('Treasure received');
   assert.equal(await page.getByRole('button', { name: 'Collected free_1', exact: true }).isDisabled(), true);
@@ -198,6 +226,7 @@ try {
   await wallet(afterFree);
 
   await page.waitForFunction(() => window.__dealerMetrics?.frames > 15);
+  await page.getByTestId('pass-ladder').evaluate(element => { element.scrollTop = 0; });
   const celebrationsBeforePremium = await page.evaluate(() => window.__dealerMetrics.celebrations);
   let releasePremium;
   let committedPremium;
@@ -219,6 +248,7 @@ try {
   assert.equal(await page.evaluate(() => window.__dealerMetrics.celebrations), celebrationsBeforePremium);
   releasePremium();
   await collect('Premium unlocked');
+  await currentMilestone(1, false);
   await page.getByText('PREMIUM ACTIVE', { exact: true }).waitFor();
   const premiumPlayer = await api('002007');
   assert.equal(premiumPlayer.resources.find(item => item.resource_id === 'gem').quantity, '50');
@@ -285,6 +315,7 @@ try {
   await page.getByRole('button', { name: 'ENTER THE SHOP', exact: true }).waitFor();
   await openPass();
   await expbp(350);
+  await currentMilestone(3);
   await page.getByText('PREMIUM ACTIVE', { exact: true }).waitFor();
   for (const id of ['free_1', 'premium_1']) assert.equal(await page.getByRole('button', { name: `Collected ${id}`, exact: true }).isDisabled(), true);
   for (const id of ['free_2', 'free_3', 'premium_2', 'premium_3']) assert.equal(await page.getByRole('button', { name: `Claim ${id}`, exact: true }).isDisabled(), false);
@@ -293,8 +324,50 @@ try {
   assert.deepEqual(reloaded.milestones, completedPass.milestones);
   assert.deepEqual((await api('002007')).resources, completedPlayer.resources);
   await wallet(completedPlayer);
+  for (let step = 1; step <= 6; step += 1) {
+    for (const track of ['premium', 'free']) {
+      const segment = page.getByTestId(`pass-rail-reached-${track}_${step}`);
+      if (step <= 3) {
+        const box = await segment.boundingBox();
+        assert.ok(box.width >= 8 && box.height > 0, 'Reached milestones must retain a visible gold rail segment.');
+      } else {
+        assert.equal(await segment.count(), 0);
+      }
+    }
+  }
+  await page.getByRole('tab', { name: 'Shop', exact: true }).click();
+  await openPass();
+  await currentMilestone(3);
+  await page.getByRole('tab', { name: 'Daily Quests', exact: true }).click();
+  await page.getByRole('tab', { name: 'Milestones', exact: true }).click();
+  await currentMilestone(3);
+  const ladder = page.getByTestId('pass-ladder');
+  const focusedScroll = await ladder.evaluate(element => element.scrollTop);
+  const ladderBox = await ladder.boundingBox();
+  await page.mouse.move(ladderBox.x + ladderBox.width / 2, ladderBox.y + ladderBox.height / 2);
+  await page.mouse.wheel(0, -500);
+  await page.waitForFunction(previous => Math.abs(document.querySelector('[data-testid="pass-ladder"]').scrollTop - previous) > 50, focusedScroll);
+  const manualScroll = await ladder.evaluate(element => element.scrollTop);
+  await page.waitForTimeout(1200);
+  assert.ok(Math.abs(await ladder.evaluate(element => element.scrollTop) - manualScroll) <= 1, 'Ordinary timer updates must preserve manual ladder scrolling.');
+  const refreshedPass = page.waitForResponse(response => response.url().endsWith('/api/004001'));
+  await page.getByRole('button', { name: 'Refresh Battle Pass', exact: true }).click();
+  assert.equal((await (await refreshedPass).json()).expbp, 350);
+  await page.waitForFunction(() => {
+    const button = document.querySelector('[aria-label="Refresh Battle Pass"]');
+    return button && button.getAttribute('aria-disabled') !== 'true' && !button.disabled;
+  });
+  await page.waitForTimeout(1200);
+  assert.ok(Math.abs(await ladder.evaluate(element => element.scrollTop) - manualScroll) <= 1, 'A same-EXPBP refresh must preserve manual ladder scrolling.');
+  await page.getByRole('tab', { name: 'Shop', exact: true }).click();
+  await openPass();
+  await currentMilestone(3);
+  await page.screenshot({ path: `${artifacts}/pass-current-350-390.png` });
+  await page.screenshot({ path: `${artifacts}/pass-reached-rail.png` });
   await screenshot('pass-progress');
   await page.setViewportSize({ width: 375, height: 667 });
+  await currentMilestone(3);
+  await page.screenshot({ path: `${artifacts}/pass-current-350-375.png` });
   await screenshot('pass-milestones-small');
   await page.getByRole('button', { name: 'Collected free_1', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${artifacts}/pass-rewards-small.png` });

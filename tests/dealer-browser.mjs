@@ -31,6 +31,10 @@ async function metrics(page) {
   return page.evaluate(() => ({ ...window.__dealerMetrics }));
 }
 
+function cameraYaw(camera) {
+  return Math.atan2(camera[0], camera[2]);
+}
+
 async function screenshot(page, name) {
   await page.waitForTimeout(650);
   return page.screenshot({ path: `${artifacts}/${name}.png` });
@@ -40,11 +44,14 @@ try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: 'no-preference' });
   const page = await context.newPage();
   let expectedContextLoss = false;
+  let shopPurchaseRequests = 0;
   inspectErrors(page, () => expectedContextLoss);
+  page.on('request', request => { if (request.url().endsWith('/api/003002')) shopPurchaseRequests += 1; });
   await page.goto(previewUrl);
   await page.getByRole('button', { name: 'ENTER THE SHOP', exact: true }).waitFor();
   const canvas = page.getByTestId('dealer-canvas').locator('canvas');
   await canvas.waitFor();
+  const originalCanvas = await canvas.elementHandle();
   await page.waitForFunction(() => window.__dealerMetrics?.frames > 5 && window.__dealerMetrics?.drawCalls > 0 && window.__dealerMetrics?.triangles > 0);
   const initial = await metrics(page);
   const firstFrame = await canvas.screenshot({ path: `${artifacts}/dealer-frame-a.png` });
@@ -56,24 +63,86 @@ try {
   const greetingBefore = (await metrics(page)).greetings;
   await page.getByRole('button', { name: 'Greet Orin', exact: true }).click();
   await page.waitForFunction(count => window.__dealerMetrics.greetings > count, greetingBefore);
-  const cameraBeforeDrag = (await metrics(page)).camera[0];
+  const greetingsAfterTap = (await metrics(page)).greetings;
+  const yawBeforeDrag = cameraYaw((await metrics(page)).camera);
   const greetingArea = await page.getByRole('button', { name: 'Greet Orin', exact: true }).boundingBox();
   await page.mouse.move(greetingArea.x + greetingArea.width * 0.45, greetingArea.y + greetingArea.height * 0.5);
   await page.mouse.down();
-  await page.mouse.move(greetingArea.x + greetingArea.width * 0.8, greetingArea.y + greetingArea.height * 0.6, { steps: 15 });
-  await page.waitForFunction(position => Math.abs(window.__dealerMetrics.camera[0] - position) > 0.03, cameraBeforeDrag);
+  await page.mouse.move(greetingArea.x + greetingArea.width * 0.8, greetingArea.y + greetingArea.height * 0.5, { steps: 15 });
+  await page.waitForTimeout(1300);
+  const mouseRightYaw = cameraYaw((await metrics(page)).camera);
+  await page.screenshot({ path: `${artifacts}/dealer-orbit-right.png` });
+  assert.ok(Math.abs(mouseRightYaw - yawBeforeDrag) >= 0.12,
+    `Mouse drag must expose a different 3D viewpoint; observed yaw change ${Math.abs(mouseRightYaw - yawBeforeDrag).toFixed(3)} rad.`);
   await page.mouse.up();
-  await page.waitForFunction(position => Math.abs(window.__dealerMetrics.camera[0] - position) < 0.02, cameraBeforeDrag);
+  await page.waitForTimeout(1000);
+  assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - mouseRightYaw) < 0.03, 'The viewpoint must stay available for inspection after release.');
+  await page.mouse.move(greetingArea.x + greetingArea.width * 0.8, greetingArea.y + greetingArea.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(greetingArea.x + greetingArea.width * 0.2, greetingArea.y + greetingArea.height * 0.5, { steps: 18 });
+  await page.waitForTimeout(1300);
+  const mouseLeftYaw = cameraYaw((await metrics(page)).camera);
+  assert.ok((mouseLeftYaw - yawBeforeDrag) * (mouseRightYaw - yawBeforeDrag) < 0
+    && Math.abs(mouseLeftYaw - yawBeforeDrag) >= 0.12, 'An opposite mouse drag must expose the other side of the dealer.');
+  await page.mouse.up();
+  await page.waitForTimeout(650);
+  assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - mouseLeftYaw) < 0.03);
+  await page.screenshot({ path: `${artifacts}/dealer-orbit-left.png` });
+
   const touch = await context.newCDPSession(page);
-  const touchX = greetingArea.x + greetingArea.width * 0.45;
+  const touchX = greetingArea.x + greetingArea.width * 0.2;
   const touchY = greetingArea.y + greetingArea.height * 0.5;
   await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchX, y: touchY }] });
   for (let step = 1; step <= 10; step += 1) {
-    await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: touchX + greetingArea.width * 0.035 * step, y: touchY }] });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: touchX + greetingArea.width * 0.065 * step, y: touchY }] });
   }
-  await page.waitForFunction(position => Math.abs(window.__dealerMetrics.camera[0] - position) > 0.03, cameraBeforeDrag);
+  await page.waitForTimeout(1300);
+  const touchRightYaw = cameraYaw((await metrics(page)).camera);
+  assert.ok(Math.abs(touchRightYaw - mouseLeftYaw) >= 0.12, 'Touch drag must meaningfully orbit the camera.');
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await page.waitForFunction(position => Math.abs(window.__dealerMetrics.camera[0] - position) < 0.02, cameraBeforeDrag);
+  await page.waitForTimeout(1000);
+  assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - touchRightYaw) < 0.03, 'Touch orbit must remain after release.');
+  const oppositeTouchX = greetingArea.x + greetingArea.width * 0.85;
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: oppositeTouchX, y: touchY }] });
+  for (let step = 1; step <= 10; step += 1) {
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: oppositeTouchX - greetingArea.width * 0.07 * step, y: touchY }] });
+  }
+  await page.waitForTimeout(1300);
+  const touchLeftYaw = cameraYaw((await metrics(page)).camera);
+  assert.ok((touchLeftYaw - yawBeforeDrag) * (touchRightYaw - yawBeforeDrag) < 0
+    && Math.abs(touchLeftYaw - yawBeforeDrag) >= 0.12, 'An opposite touch drag must expose the other side.');
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(650);
+  assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - touchLeftYaw) < 0.03);
+  assert.equal((await metrics(page)).greetings, greetingsAfterTap, 'Orbit drags must not trigger greeting taps.');
+  await page.getByRole('button', { name: 'Greet Orin', exact: true }).click();
+  await page.waitForFunction(count => window.__dealerMetrics.greetings === count + 1, greetingsAfterTap);
+
+  await page.setViewportSize({ width: 375, height: 568 });
+  const verticalArea = await page.getByRole('button', { name: 'Greet Orin', exact: true }).boundingBox();
+  const scrollBefore = await page.getByRole('button', { name: 'Greet Orin', exact: true }).evaluate(element => {
+    let parent = element.parentElement;
+    while (parent && !(parent.scrollHeight > parent.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(parent).overflowY))) parent = parent.parentElement;
+    if (!parent) throw new Error('Short Home viewport must provide a scrollable area.');
+    return parent.scrollTop;
+  });
+  const yawBeforeScroll = cameraYaw((await metrics(page)).camera);
+  const verticalX = verticalArea.x + verticalArea.width / 2;
+  const verticalY = verticalArea.y + verticalArea.height * 0.8;
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: verticalX, y: verticalY }] });
+  for (let step = 1; step <= 10; step += 1) {
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: verticalX, y: verticalY - step * 10 }] });
+  }
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(650);
+  const scrollAfter = await page.getByRole('button', { name: 'Greet Orin', exact: true }).evaluate(element => {
+    let parent = element.parentElement;
+    while (parent && !(parent.scrollHeight > parent.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(parent).overflowY))) parent = parent.parentElement;
+    return parent.scrollTop;
+  });
+  assert.ok(scrollAfter > scrollBefore + 5, 'Vertical touch drag over the dealer must retain normal Home scrolling.');
+  assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - yawBeforeScroll) < 0.03, 'Vertical scrolling must not orbit the camera.');
+  await page.setViewportSize({ width: 390, height: 844 });
   await touch.detach();
 
   const start = await metrics(page);
@@ -87,6 +156,22 @@ try {
   await page.getByText('DAILY OFFERS', { exact: true }).waitFor();
   await page.getByRole('button', { name: /^Buy / }).nth(8).waitFor();
   await screenshot(page, 'dealer-shop');
+
+  const stalledFrame = await page.evaluate(() => new Promise(resolveFrame => {
+    requestAnimationFrame(() => {
+      const before = { time: window.__dealerMetrics.animationTime, frames: window.__dealerMetrics.frames };
+      const deadline = performance.now() + 350;
+      while (performance.now() < deadline) {}
+      requestAnimationFrame(() => resolveFrame({
+        before,
+        after: { time: window.__dealerMetrics.animationTime, frames: window.__dealerMetrics.frames },
+      }));
+    });
+  }));
+  const stalledAnimationAdvance = stalledFrame.after.time - stalledFrame.before.time;
+  assert.ok(Number.isFinite(stalledFrame.after.frames) && stalledFrame.after.frames > stalledFrame.before.frames);
+  assert.ok(Number.isFinite(stalledAnimationAdvance) && stalledAnimationAdvance >= 0.30,
+    `A 350 ms stalled frame must advance animation by at least 0.30 s. Observed ${stalledAnimationAdvance.toFixed(3)} s.`);
 
   let releaseResponse;
   let serverCommitted;
@@ -110,13 +195,62 @@ try {
   await page.getByRole('button', { name: 'CONFIRM PURCHASE', exact: true }).click();
   await committed;
   assert.equal((await metrics(page)).celebrations, celebrationBefore, 'Celebration must wait until the app receives successful confirmation.');
+  assert.equal(await page.getByTestId('purchase-celebration').isVisible(), false);
   releaseResponse();
   await page.getByText('Treasure received', { exact: true }).waitFor();
   await page.waitForFunction(count => window.__dealerMetrics.celebrations === count + 1, celebrationBefore);
   await page.getByText('A fair trade?', { exact: true }).waitFor({ state: 'hidden' });
+  await page.getByTestId('purchase-celebration').waitFor();
+  await page.waitForFunction(() => {
+    const camera = window.__dealerMetrics.camera;
+    return window.__dealerMetrics.mode === 'celebration' && Math.abs(camera[0]) < 0.2
+      && Math.abs(camera[1] - 2.6) < 0.1 && Math.abs(camera[2] - 6.5) < 0.25;
+  });
+  const interfaceStyle = await page.getByTestId('game-interface').evaluate(element => ({
+    opacity: getComputedStyle(element).opacity,
+    pointerEvents: getComputedStyle(element).pointerEvents,
+  }));
+  assert.deepEqual(interfaceStyle, { opacity: '0', pointerEvents: 'none' });
+  assert.equal(await page.getByRole('tab', { name: 'Shop', exact: true }).count(), 0, 'Hidden navigation must leave the accessible tree.');
+  assert.equal(await page.getByRole('button', { name: /^Buy / }).count(), 0);
+  assert.equal(await page.locator('canvas').count(), 1);
+  assert.equal(await originalCanvas.evaluate(element => element.isConnected
+    && element === document.querySelector('[data-testid="dealer-canvas"] canvas')), true);
+  const stage = page.getByTestId('celebration-stage');
+  assert.equal(await stage.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
+  assert.equal(await stage.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  }), true, 'The dealer stage must receive foreground input.');
+  const confirmedPurchases = shopPurchaseRequests;
+  const cheerBefore = (await metrics(page)).celebrations;
+  await page.getByRole('button', { name: 'Celebrate with Orin', exact: true }).click();
+  await page.waitForFunction(count => window.__dealerMetrics.celebrations === count + 1, cheerBefore);
+  assert.equal(shopPurchaseRequests, confirmedPurchases, 'Cheering must not send another purchase request.');
   await screenshot(page, 'dealer-purchase');
+  await page.setViewportSize({ width: 375, height: 667 });
+  const smallStage = await stage.boundingBox();
+  const smallCollect = await page.getByRole('button', { name: 'COLLECT', exact: true }).boundingBox();
+  assert.ok(smallStage.height > 150 && smallStage.width > 250, 'The dealer must retain a usable transparent center stage.');
+  assert.ok(smallCollect.y >= 0 && smallCollect.y + smallCollect.height <= 667, 'Collect must remain reachable on a small screen.');
+  await screenshot(page, 'dealer-purchase-small');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => window.__dealerMetrics.reducedMotion === true);
+  const reducedCheerBefore = (await metrics(page)).celebrations;
+  await stage.click();
+  await page.waitForFunction(count => window.__dealerMetrics.celebrations === count + 1, reducedCheerBefore);
+  await page.waitForTimeout(200);
+  const reducedCheerFrames = (await metrics(page)).frames;
+  await page.waitForTimeout(500);
+  assert.ok((await metrics(page)).frames <= reducedCheerFrames + 1, 'Reduced Motion cheer must settle without a continuous animation loop.');
+  assert.equal(shopPurchaseRequests, confirmedPurchases);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'COLLECT', exact: true }).click();
   await page.getByText('Treasure received', { exact: true }).waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => window.__dealerMetrics.mode === 'shop');
+  assert.equal(await page.getByRole('tab', { name: 'Shop', exact: true }).count(), 1);
+  assert.equal(await originalCanvas.evaluate(element => element.isConnected), true);
 
   await page.setViewportSize({ width: 375, height: 667 });
   await page.getByRole('tab', { name: 'Home', exact: true }).click();
@@ -147,6 +281,25 @@ try {
   await page.waitForTimeout(500);
   assert.ok((await metrics(page)).frames <= reducedFrames + 1, 'Reduced motion should avoid the continuous animation loop.');
   await screenshot(page, 'dealer-reduced-motion');
+
+  await page.getByRole('tab', { name: 'Home', exact: true }).click();
+  await page.waitForFunction(() => window.__dealerMetrics.mode === 'home');
+  const reducedYawBefore = cameraYaw((await metrics(page)).camera);
+  const reducedArea = await page.getByRole('button', { name: 'Greet Orin', exact: true }).boundingBox();
+  await page.mouse.move(reducedArea.x + reducedArea.width * 0.2, reducedArea.y + reducedArea.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(reducedArea.x + reducedArea.width * 0.8, reducedArea.y + reducedArea.height * 0.5, { steps: 15 });
+  await page.waitForFunction(position => {
+    const camera = window.__dealerMetrics.camera;
+    return Math.abs(Math.atan2(camera[0], camera[2]) - position) >= 0.12;
+  }, reducedYawBefore);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const manualReduced = await metrics(page);
+  await page.waitForTimeout(500);
+  assert.ok((await metrics(page)).frames <= manualReduced.frames + 1, 'Manual orbit with Reduce Motion must settle without continuous animation.');
+  assert.ok(Math.abs(cameraYaw((await metrics(page)).camera) - cameraYaw(manualReduced.camera)) < 0.01);
+  await screenshot(page, 'dealer-reduced-motion-orbit');
 
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.waitForFunction(() => window.__dealerMetrics.reducedMotion === false);
@@ -196,7 +349,8 @@ try {
   assert.deepEqual(runtimeErrors, []);
 
   console.log(`Dealer rendered ${summary.drawCalls} draw calls and ${summary.triangles} triangles, approximately ${observedFps.toFixed(1)} frames/s in local headless Chrome.`);
-  console.log(`Verified moving pixels, greeting, mouse/touch drag, camera transition, successful-purchase celebration, responsive layouts, visibility pause, reduced motion, context loss/retry, unsupported WebGL fallback with working purchase. Screenshots: ${artifacts}`);
+  console.log(`Animation advanced ${stalledAnimationAdvance.toFixed(3)} s after a 350 ms main-thread stall.`);
+  console.log(`Verified moving pixels, greeting, retained mouse/touch orbit, opposite viewpoints, normal vertical scrolling, camera transition, successful-purchase celebration, responsive layouts, visibility pause, reduced motion, context loss/retry, unsupported WebGL fallback with working purchase. Screenshots: ${artifacts}`);
 } finally {
   await browser.close();
 }

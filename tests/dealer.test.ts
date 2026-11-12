@@ -12,6 +12,27 @@ const idle: DealerInteraction = {
   reducedMotion: false,
 };
 
+test('software rendering keeps the 3D model with vertex-lit materials', () => {
+  const world = createDealerWorld(true);
+  let lambertMeshes = 0;
+  world.root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of materials) {
+      assert.ok(!(material instanceof THREE.MeshStandardMaterial));
+      if (material instanceof THREE.MeshLambertMaterial) lambertMeshes++;
+    }
+  });
+  assert.ok(lambertMeshes > 50);
+  const crystal = world.root.getObjectByName('floating-rune')!;
+  world.update(0, 0.016, idle);
+  world.update(1, 0.016, idle);
+  assert.notEqual(crystal.position.y, 2.23);
+  world.dispose();
+});
+
 test('dealer has finite geometry and animated transforms within mobile budget', () => {
   const world = createDealerWorld();
   let draws = 0;
@@ -113,4 +134,34 @@ test('dispose releases each shared geometry and material once', () => {
   assert.equal(disposed, resources.size);
   assert.equal(instanceDisposals, instanceCount);
   assert.equal(world.root.children.length, 0);
+});
+
+test('confirmed celebration visibly raises both arms and emits a finite three-second reward burst', () => {
+  const world = createDealerWorld();
+  const left = world.root.getObjectByName('greeting-arm')!;
+  const right = world.root.getObjectByName('crystal-hand-arm')!;
+  const burst = world.root.getObjectByName(
+    'purchase-reward-spark-burst',
+  ) as THREE.Points;
+  world.update(1, 0.016, idle);
+  assert.equal(burst.visible, false);
+  world.update(2, 0.016, { ...idle, celebration: 1 });
+  world.update(3.5, 0.016, { ...idle, celebration: 1 });
+  assert.ok(left.rotation.z < -1, 'left hand lifts into the clear stage');
+  assert.ok(right.rotation.z > 0.6, 'crystal hand joins the cheer');
+  assert.equal(burst.visible, true);
+  const positions = burst.geometry.attributes.position;
+  for (let index = 0; index < positions.count; index++) {
+    assert.ok(Number.isFinite(positions.getX(index)));
+    assert.ok(Number.isFinite(positions.getY(index)));
+    assert.ok(Number.isFinite(positions.getZ(index)));
+  }
+  world.update(5.1, 0.016, { ...idle, celebration: 1 });
+  assert.equal(burst.visible, false);
+  assert.equal(right.rotation.z, 0);
+  world.update(6, 0.016, { ...idle, celebration: 2, reducedMotion: true });
+  assert.equal(burst.visible, false);
+  assert.equal(left.rotation.z, 0);
+  assert.equal(right.rotation.z, 0);
+  world.dispose();
 });

@@ -1,3 +1,5 @@
+// Remount the native GL tree when this screen is edited during development.
+// @refresh reset
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -33,8 +35,9 @@ import {
   type StaticOffer,
 } from './src/game';
 import { gameStorage, newRequestId } from './src/storage';
-import DealerScene from './src/dealer/DealerScene';
+import DealerScene, { type DealerPointer } from './src/dealer/DealerScene';
 import BattlePassScreen from './src/BattlePassScreen';
+import PurchaseCelebration from './src/PurchaseCelebration';
 import type { BattlePassAction, BattlePassState } from './src/battlepass';
 import {
   colors,
@@ -116,7 +119,9 @@ export default function App() {
 
 function Game() {
   const { width, height } = useWindowDimensions();
-  const pointer = useRef({ x: 0, y: 0 });
+  const pointer = useRef<DealerPointer>({ x: 0, y: 0 });
+  const gestureStart = useRef({ x: 0, y: 0 });
+  const didDrag = useRef(false);
   const gestureSize = useRef({ width, height });
   const [greeting, setGreeting] = useState(1);
   const [celebration, setCelebration] = useState(0);
@@ -127,33 +132,46 @@ function Game() {
   const gesture = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponderCapture: (_, movement) =>
-        Math.abs(movement.dx) > 5 || Math.abs(movement.dy) > 5,
+        movement.numberActiveTouches <= 1 &&
+        Math.abs(movement.dx) > 6 &&
+        Math.abs(movement.dx) > Math.abs(movement.dy),
       onMoveShouldSetPanResponder: (_, movement) =>
-        Math.abs(movement.dx) > 5 || Math.abs(movement.dy) > 5,
-      onPanResponderMove: (event) => {
+        movement.numberActiveTouches <= 1 &&
+        Math.abs(movement.dx) > 6 &&
+        Math.abs(movement.dx) > Math.abs(movement.dy),
+      onPanResponderGrant: () => {
+        didDrag.current = true;
+        gestureStart.current = {
+          x: pointer.current.x,
+          y: pointer.current.y,
+        };
+      },
+      onPanResponderMove: (_, movement) => {
+        if (movement.numberActiveTouches > 1) return;
         pointer.current.x = Math.max(
           -1,
           Math.min(
             1,
-            (event.nativeEvent.locationX / gestureSize.current.width) * 2 - 1,
+            gestureStart.current.x +
+              (movement.dx / Math.max(1, gestureSize.current.width)) * 2,
           ),
         );
         pointer.current.y = Math.max(
           -1,
           Math.min(
             1,
-            (event.nativeEvent.locationY / gestureSize.current.height) * 2 - 1,
+            gestureStart.current.y +
+              movement.dy / Math.max(1, gestureSize.current.height),
           ),
         );
-      },
-      onPanResponderRelease: () => {
-        pointer.current.x = 0;
-        pointer.current.y = 0;
+        pointer.current.invalidate?.();
       },
       onPanResponderTerminate: () => {
-        pointer.current.x = 0;
-        pointer.current.y = 0;
+        pointer.current.x = gestureStart.current.x;
+        pointer.current.y = gestureStart.current.y;
+        pointer.current.invalidate?.();
       },
+      onPanResponderTerminationRequest: () => false,
     }),
   ).current;
   const [fontsLoaded, fontError] = useFonts({
@@ -431,18 +449,30 @@ function Game() {
           shop={screen !== 'home' && !receipt}
           greeting={greeting}
           celebration={celebration}
+          celebrating={!!receipt}
           pointer={pointer}
         />
         <LinearGradient
           colors={
-            screen === 'home'
+            receipt
+              ? ['#07151e10', '#07151e00', '#07151e30']
+              : screen === 'home'
               ? ['#07151e85', '#10212000', '#07151ed9']
               : ['#07151e90', '#0b201c85', '#07151ef0']
           }
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
+        <SafeAreaView
+          testID="game-interface"
+          style={[s.safe, receipt && { opacity: 0 }]}
+          pointerEvents={receipt ? 'none' : 'auto'}
+          accessibilityElementsHidden={!!receipt}
+          aria-hidden={!!receipt}
+          {...(Platform.OS === 'web' ? { inert: !!receipt } : {})}
+          importantForAccessibility={receipt ? 'no-hide-descendants' : 'auto'}
+          edges={['top', 'left', 'right']}
+        >
           <View style={s.topBar}>
             <View style={s.brand}>
               <Icon name="star-four-points" size={19} color={colors.gold} />
@@ -577,7 +607,11 @@ function Game() {
                       accessibilityRole="button"
                       accessibilityLabel="Greet Orin"
                       style={StyleSheet.absoluteFill}
+                      onPressIn={() => {
+                        didDrag.current = false;
+                      }}
                       onPress={() => {
+                        if (didDrag.current) return;
                         setGreeting((value) => value + 1);
                         const lines = [
                           'Ah, a curious soul! Come a little closer.',
@@ -870,29 +904,17 @@ function Game() {
           </>
         )}
       </GameModal>
-      <GameModal
-        visible={!!receipt}
-        title={receipt?.title || 'Treasure received'}
-        onClose={() => setReceipt(null)}
-        busy={busy}
-        docked
-      >
-        <RewardList
-          items={Object.fromEntries(
-            (receipt?.items || []).map((item) => [
-              item.resource_id,
-              Number(item.quantity),
-            ]),
-          )}
-        />
-        {receipt?.message && <Text style={s.body}>{receipt.message}</Text>}
-        {error && <Text style={s.connectionError}>{error}</Text>}
-        <GameButton
-          title="COLLECT"
+      {receipt && (
+        <PurchaseCelebration
+          title={receipt.title}
+          items={receipt.items}
+          message={receipt.message}
+          error={error || undefined}
           busy={busy}
-          onPress={() => setReceipt(null)}
+          onCollect={() => setReceipt(null)}
+          onCheer={() => setCelebration((value) => value + 1)}
         />
-      </GameModal>
+      )}
       <GameModal
         visible={!!premiumConfirmation}
         title="Unlock Premium"

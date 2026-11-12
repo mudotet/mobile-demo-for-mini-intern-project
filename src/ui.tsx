@@ -235,14 +235,12 @@ export function GameModal({
   children,
   onClose,
   busy,
-  docked = false,
 }: {
   visible: boolean;
   title: string;
   children: ReactNode;
   onClose: () => void;
   busy?: boolean;
-  docked?: boolean;
 }) {
   return (
     <Modal
@@ -255,7 +253,7 @@ export function GameModal({
       statusBarTranslucent
     >
       <KeyboardAvoidingView
-        style={[s.modalBackdrop, docked && s.dockedBackdrop]}
+        style={s.modalBackdrop}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={s.modalPanel} accessibilityViewIsModal>
@@ -426,11 +424,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 22,
-  },
-  dockedBackdrop: {
-    justifyContent: 'flex-end',
-    backgroundColor: '#020b0c22',
-    paddingBottom: 28,
   },
   modalPanel: {
     width: '100%',
