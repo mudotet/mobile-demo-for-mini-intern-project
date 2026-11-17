@@ -53,6 +53,85 @@ test('device is stored before first login and reused by a restarted client', asy
   assert.equal(restarted.calls[0].body.device_id, deviceId);
 });
 
+test('new demo identity is saved before login and retained after restart', async () => {
+  const { client, calls, storage } = setup();
+  await client.connect();
+  const oldDevice = calls[0].body.device_id;
+  await client.startNewDemoAccount();
+  await client.connect();
+  const newLogin = calls.filter(call => call.url.endsWith('001002'))[1];
+  assert.notEqual(newLogin.body.device_id, oldDevice);
+  const restarted = setup(undefined, storage);
+  await restarted.client.connect();
+  assert.equal(restarted.calls[0].body.device_id, newLogin.body.device_id);
+});
+
+test('failed demo identity persistence keeps the previous session and device', async () => {
+  const { client, calls, storage } = setup();
+  await client.connect();
+  const before = [...storage.values.entries()];
+  storage.setItem = async () => { throw new Error('Storage full'); };
+  await assert.rejects(client.startNewDemoAccount(), (error: GameError) => error.code === 'STORAGE_ERROR');
+  assert.deepEqual([...storage.values.entries()], before);
+  await client.refreshPlayer();
+  assert.equal(calls.filter(call => call.url.endsWith('001002')).length, 1);
+  assert.equal(calls.at(-1)?.authorization, 'Bearer session-token');
+});
+
+test('lost new demo login keeps its identity and request for retry after reload', async () => {
+  let logins = 0;
+  const { client, calls, storage } = setup(call => {
+    if (call.url.endsWith('001002')) {
+      if (++logins === 2) throw new TypeError('Lost response');
+      return reply({ ...player, device_id: call.body.device_id, access_token: 'old-token' });
+    }
+    return reply(player);
+  });
+  await client.connect();
+  await client.startNewDemoAccount();
+  await assert.rejects(client.connect(), (error: GameError) => error.retryable);
+  const failed = calls.at(-1)!;
+  assert.equal(failed.authorization, null);
+  assert.notEqual(failed.body.device_id, calls[0].body.device_id);
+  const restarted = setup(undefined, storage);
+  await restarted.client.connect();
+  assert.deepEqual(restarted.calls[0].body, failed.body);
+  assert.equal(restarted.calls[0].id, failed.id);
+});
+
+test('new demo account preserves a pending Battle Pass action', async () => {
+  const storage = new MemoryStorage();
+  const saved = JSON.stringify({
+    deviceId: 'existing-device',
+    passOperation: { action: 'premium', passId: 'weekly:123', targetId: '', requestId: 'pending-id' },
+  });
+  storage.values.set('fantasy-game:http://localhost:8080', saved);
+  const { client, calls } = setup(undefined, storage);
+  await assert.rejects(client.startNewDemoAccount(), (error: GameError) => error.code === 'PURCHASE_PENDING');
+  assert.equal(storage.values.get('fantasy-game:http://localhost:8080'), saved);
+  assert.equal(calls.length, 0);
+});
+
+test('new demo account cannot discard a pending or in-flight purchase', async () => {
+  let release!: () => void;
+  const { client, storage } = setup(call => {
+    if (call.url.endsWith('001002')) return reply({ ...player, device_id: call.body.device_id, access_token: 'token' });
+    if (call.url.endsWith('003002')) return new Promise<Response>((_, reject) => {
+      release = () => reject(new TypeError('Lost response'));
+    });
+    return reply(player);
+  });
+  await client.connect();
+  const purchase = client.purchase('static:xp_gold');
+  await assert.rejects(client.startNewDemoAccount(), (error: GameError) => error.code === 'PURCHASE_PENDING');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  release();
+  await assert.rejects(purchase);
+  const before = [...storage.values.entries()];
+  await assert.rejects(client.startNewDemoAccount(), (error: GameError) => error.code === 'PURCHASE_PENDING');
+  assert.deepEqual([...storage.values.entries()], before);
+});
+
 test('lost login response retries the identical persisted body and request ID after restart', async () => {
   const first = setup(() => { throw new TypeError('Network request failed'); });
   await assert.rejects(first.client.connect(), (error: GameError) => error.retryable);

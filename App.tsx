@@ -246,7 +246,7 @@ function Game() {
     }
   }
 
-  async function connect(input: string) {
+  async function connect(input: string, newDemoAccount = false) {
     await run(async () => {
       const baseUrl = normalizeServerUrl(input);
       await AsyncStorage.setItem(addressKey, baseUrl);
@@ -262,6 +262,17 @@ function Game() {
         setPlayer(null);
         setShop(null);
         setPass(null);
+        setScreen('home');
+      }
+      if (newDemoAccount) {
+        await client.current.startNewDemoAccount();
+        setPlayer(null);
+        setShop(null);
+        setPass(null);
+        setSelection(null);
+        setReceipt(null);
+        setPremiumConfirmation(null);
+        setPendingAction(null);
         setScreen('home');
       }
       setStatus('Finding your adventurer…');
@@ -854,9 +865,25 @@ function Game() {
           onPress={() => void connect(address)}
         />
         {player && (
-          <Text selectable style={s.playerId}>
-            Player {player.player_id.slice(0, 8)}
-          </Text>
+          <>
+            <Text selectable style={s.playerId}>
+              Player {player.player_id.slice(0, 8)}
+            </Text>
+            <Text style={s.body}>
+              Create a new account on the connected server with 1,000 Gold, 100 Gems and 0 XP.
+              Your old account stays on the server, but this device will switch to the new account with no option to switch back.
+            </Text>
+            <GameButton
+              secondary
+              title="CREATE NEW DEMO ACCOUNT"
+              testID="new-demo-account"
+              disabled={busy || pending}
+              onPress={() => void connect(server, true)}
+            />
+            {pending && (
+              <Text style={s.body}>Resolve your pending action before creating a new account.</Text>
+            )}
+          </>
         )}
       </GameModal>
       <GameModal

@@ -226,6 +226,34 @@ export class GameClient {
     return this.refreshPlayer();
   }
 
+  async startNewDemoAccount(): Promise<void> {
+    const busy = () =>
+      this.loading || this.loggingIn || this.purchasing || this.battleOperation;
+    if (busy())
+      throw new GameError(
+        'PURCHASE_PENDING',
+        'Finish the current action before creating a demo account.',
+      );
+    await this.loadState();
+    if (
+      busy() ||
+      this.state?.purchase ||
+      this.state?.passOperation ||
+      this.state?.login
+    )
+      throw new GameError(
+        'PURCHASE_PENDING',
+        'Confirm the pending action before creating a demo account.',
+      );
+    await this.save({
+      deviceId: this.options.requestId(),
+      login: undefined,
+      purchase: undefined,
+      passOperation: undefined,
+    });
+    this.token = undefined;
+  }
+
   async refreshPlayer(): Promise<PlayerData> {
     await this.ensureSession();
     const value = await this.authenticated('/api/002007', {});
